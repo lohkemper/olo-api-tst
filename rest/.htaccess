@@ -1,0 +1,46 @@
+# ============================================================================
+# CORS Headers - Production Quick Fix
+# ============================================================================
+# Diese Datei kann direkt auf den Server hochgeladen werden als .htaccess
+# ============================================================================
+
+<IfModule mod_headers.c>
+  # Allow specific origins
+  SetEnvIf Origin "^http(s)?://(localhost:4200|localhost:4201|oliverlohkemper\.de|www\.oliverlohkemper\.de)$" AccessControlAllowOrigin=$0
+
+  # Set CORS headers if origin is allowed
+  Header always set Access-Control-Allow-Origin "%{AccessControlAllowOrigin}e" env=AccessControlAllowOrigin
+  Header always set Access-Control-Allow-Credentials "true" env=AccessControlAllowOrigin
+  Header always set Access-Control-Max-Age "86400" env=AccessControlAllowOrigin
+
+  # Allow all necessary methods and headers
+  Header always set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+  Header always set Access-Control-Allow-Headers "Content-Type, Authorization, X-CSRF-Token, X-Requested-With, Accept"
+</IfModule>
+
+# ============================================================================
+# Handle OPTIONS Preflight Request
+# ============================================================================
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /rest2/
+
+  # Handle OPTIONS preflight - return 200 OK immediately
+  RewriteCond %{REQUEST_METHOD} OPTIONS
+  RewriteRule ^(.*)$ $1 [R=200,L]
+
+  # Handle all paths that are not real files or directories
+  # This catches: auth/login, users/123/roles, roles, permissions, etc.
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule ^(.+)$ /rest2/index.php?r=$1 [QSA,L]
+</IfModule>
+
+# ============================================================================
+# Security Headers (optional but recommended)
+# ============================================================================
+<IfModule mod_headers.c>
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set X-Frame-Options "SAMEORIGIN"
+  Header always set X-XSS-Protection "1; mode=block"
+</IfModule>

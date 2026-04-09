@@ -1,0 +1,1814 @@
+openapi: 3.0.3
+info:
+  title: MBC REST API
+  description: |
+    MBC Backend REST API mit Security-Features:
+    - JWT Authentication (HttpOnly Cookies)
+    - CSRF Protection für state-changing Operations
+    - Rate Limiting (5 Login-Versuche / 5 Minuten)
+    - Comprehensive Logging & Monitoring
+  version: 2.0.0
+  contact:
+    name: MBC Development Team
+  license:
+    name: Proprietary
+
+servers:
+  - url: http://localhost/rest
+    description: Development Server
+  - url: https://oliverlohkemper.de/rest
+    description: Production Server
+
+tags:
+  - name: Authentication
+    description: Login, Logout, Token-Management
+  - name: Users
+    description: User-Management
+  - name: Roles
+    description: Role-Management (RBAC)
+  - name: Permissions
+    description: Permission-Management (RBAC)
+  - name: Navigation
+    description: Navigation-Menu-Management
+  - name: Email
+    description: Email-Management (IMAP Integration)
+  - name: Warehouse
+    description: Warehouse & Inventory Management
+  - name: Articles
+    description: Content-Management
+  - name: Profiles
+    description: User Profiles
+  - name: System
+    description: Health-Check, Monitoring
+
+security:
+  - cookieAuth: []
+  - csrfToken: []
+
+paths:
+  # ==================== AUTHENTICATION ====================
+  /auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: User Login
+      description: |
+        Authentifiziert einen User und erstellt JWT-Token + CSRF-Token.
+        **Rate Limit:** 5 Versuche pro 5 Minuten pro IP
+      operationId: login
+      security: []  # No authentication required
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: user@example.com
+                password:
+                  type: string
+                  format: password
+                  example: SecurePassword123!
+      responses:
+        '200':
+          description: Login erfolgreich
+          headers:
+            Set-Cookie:
+              description: JWT Token (HttpOnly, Secure)
+              schema:
+                type: string
+                example: jwt_token=eyJ0eXAiOiJKV1Q...; Path=/; HttpOnly; Secure; SameSite=None
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    $ref: '#/components/schemas/User'
+                  csrfToken:
+                    type: string
+                    description: CSRF-Token für nachfolgende Requests
+                    example: abc123def456...
+        '401':
+          description: Ungültige Credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Rate Limit überschritten
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Too Many Requests
+                  message:
+                    type: string
+                    example: Rate limit exceeded. Please try again later.
+                  retryAfter:
+                    type: integer
+                    description: Sekunden bis zum nächsten Versuch
+                    example: 300
+                  resetAt:
+                    type: string
+                    format: date-time
+                    example: '2025-12-24T12:35:00Z'
+
+  /auth/logout:
+    post:
+      tags:
+        - Authentication
+      summary: User Logout
+      description: Beendet die Session und löscht JWT-Token + CSRF-Token
+      operationId: logout
+      responses:
+        '200':
+          description: Logout erfolgreich
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Logged out successfully
+
+  /auth/user:
+    get:
+      tags:
+        - Authentication
+      summary: Get Current User
+      description: Gibt aktuell authentifizierten User zurück
+      operationId: getCurrentUser
+      responses:
+        '200':
+          description: User-Daten
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ==================== USERS ====================
+  /users:
+    get:
+      tags:
+        - Users
+      summary: List Users
+      description: Gibt Liste aller User zurück (erfordert Permissions)
+      operationId: listUsers
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - name: is_active
+          in: query
+          description: Filter nach aktiven/inaktiven Usern
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: User-Liste
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /users/{userId}:
+    get:
+      tags:
+        - Users
+      summary: Get User by ID
+      operationId: getUserById
+      parameters:
+        - $ref: '#/components/parameters/UserIdParam'
+      responses:
+        '200':
+          description: User gefunden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /users/{userId}/roles:
+    post:
+      tags:
+        - Users
+      summary: Assign Role to User
+      description: |
+        Weist einem User eine Role zu.
+        **Erfordert Permission: `roles.manage`**
+      operationId: assignRoleToUser
+      parameters:
+        - $ref: '#/components/parameters/UserIdParam'
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                roleId:
+                  type: integer
+                  example: 2
+                roleName:
+                  type: string
+                  example: editor
+      responses:
+        '200':
+          description: Role zugewiesen
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /users/{userId}/roles/{roleId}:
+    delete:
+      tags:
+        - Users
+      summary: Remove Role from User
+      operationId: removeRoleFromUser
+      parameters:
+        - $ref: '#/components/parameters/UserIdParam'
+        - name: roleId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      responses:
+        '200':
+          description: Role entfernt
+
+  /users/{userId}/permissions:
+    post:
+      tags:
+        - Users
+      summary: Assign Permission to User
+      operationId: assignPermissionToUser
+      parameters:
+        - $ref: '#/components/parameters/UserIdParam'
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - permissionId
+              properties:
+                permissionId:
+                  type: integer
+      responses:
+        '200':
+          description: Permission zugewiesen
+
+  /users/{userId}/permissions/{permissionId}:
+    delete:
+      tags:
+        - Users
+      summary: Remove Permission from User
+      operationId: removePermissionFromUser
+      parameters:
+        - $ref: '#/components/parameters/UserIdParam'
+        - name: permissionId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      responses:
+        '200':
+          description: Permission entfernt
+
+  # ==================== ROLES ====================
+  /roles:
+    get:
+      tags:
+        - Roles
+      summary: List Roles
+      operationId: listRoles
+      responses:
+        '200':
+          description: Roles-Liste
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Role'
+
+  /permissions:
+    get:
+      tags:
+        - Permissions
+      summary: List Permissions
+      operationId: listPermissions
+      responses:
+        '200':
+          description: Permissions-Liste
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Permission'
+
+    post:
+      tags:
+        - Permissions
+      summary: Create Permission
+      description: |
+        Erstellt eine neue Permission.
+        **Erfordert CSRF-Token im Header: `X-CSRF-Token`**
+      operationId: createPermission
+      parameters:
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - resource
+                - action
+              properties:
+                name:
+                  type: string
+                  example: articles.create.own
+                resource:
+                  type: string
+                  example: articles
+                action:
+                  type: string
+                  enum: [create, read, update, delete]
+                  example: create
+                scope:
+                  type: string
+                  enum: [own, any]
+                  example: own
+                description:
+                  type: string
+                  example: Erlaubt das Erstellen eigener Artikel
+      responses:
+        '201':
+          description: Permission erstellt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Permission'
+        '403':
+          $ref: '#/components/responses/CsrfError'
+
+  /permissions/{permissionId}:
+    put:
+      tags:
+        - Permissions
+      summary: Update Permission
+      operationId: updatePermission
+      parameters:
+        - name: permissionId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+      responses:
+        '200':
+          description: Permission aktualisiert
+        '403':
+          $ref: '#/components/responses/CsrfError'
+
+    delete:
+      tags:
+        - Permissions
+      summary: Delete Permission
+      operationId: deletePermission
+      parameters:
+        - name: permissionId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      responses:
+        '200':
+          description: Permission gelöscht
+
+  /roles/{roleId}/permissions:
+    get:
+      tags:
+        - Roles
+      summary: Get Role Permissions
+      description: Gibt alle Permissions einer Role zurück
+      operationId: getRolePermissions
+      parameters:
+        - name: roleId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Permissions-Liste
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Permission'
+
+    post:
+      tags:
+        - Roles
+      summary: Assign Permission to Role
+      description: Weist einer Role eine Permission zu
+      operationId: assignPermissionToRole
+      parameters:
+        - name: roleId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - permissionId
+              properties:
+                permissionId:
+                  type: integer
+      responses:
+        '200':
+          description: Permission zugewiesen
+
+  /roles/{roleId}/permissions/{permissionId}:
+    delete:
+      tags:
+        - Roles
+      summary: Remove Permission from Role
+      operationId: removePermissionFromRole
+      parameters:
+        - name: roleId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: permissionId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      responses:
+        '200':
+          description: Permission entfernt
+
+  # ==================== NAVIGATION ====================
+  /navigations:
+    get:
+      tags:
+        - Navigation
+      summary: List Navigations
+      description: |
+        Gibt Liste aller Navigations zurück, gefiltert nach User-Permissions.
+        User sieht nur Navigations, für die er Berechtigungen hat.
+      operationId: listNavigations
+      responses:
+        '200':
+          description: Navigations-Liste
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Navigation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /navigations/{navigationId}:
+    get:
+      tags:
+        - Navigation
+      summary: Get Navigation by ID
+      operationId: getNavigationById
+      parameters:
+        - name: navigationId
+          in: path
+          required: true
+          description: Navigation ID
+          schema:
+            type: integer
+            example: 1
+      responses:
+        '200':
+          description: Navigation gefunden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Navigation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /navigation-roles:
+    get:
+      tags:
+        - Navigation
+      summary: Get Navigation-Role Assignments
+      description: |
+        Gibt Navigation-Role-Zuweisungen zurück.
+        Filter möglich nach navigation_id oder role_id.
+      operationId: getNavigationRoles
+      parameters:
+        - name: navigation_id
+          in: query
+          description: Filter nach Navigation ID
+          schema:
+            type: integer
+        - name: role_id
+          in: query
+          description: Filter nach Role ID
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Navigation-Role Assignments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NavigationRoleAssignment'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /navigations/{navigationId}/roles:
+    post:
+      tags:
+        - Navigation
+      summary: Assign Role to Navigation
+      description: |
+        Weist einer Navigation eine Role zu.
+        **Erfordert Permission: `navigation.manage`**
+        **Erfordert CSRF-Token im Header: `X-CSRF-Token`**
+      operationId: assignRoleToNavigation
+      parameters:
+        - name: navigationId
+          in: path
+          required: true
+          description: Navigation ID
+          schema:
+            type: integer
+            example: 1
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - roleId
+              properties:
+                roleId:
+                  type: integer
+                  description: ID der Role
+                  example: 2
+      responses:
+        '200':
+          description: Role erfolgreich zugewiesen
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Role assigned successfully
+                  role:
+                    type: object
+                    properties:
+                      roles_id:
+                        type: integer
+                      name:
+                        type: string
+                      display_name:
+                        type: string
+        '400':
+          description: Ungültige Eingabe
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Navigation oder Role nicht gefunden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /navigations/{navigationId}/roles/{roleId}:
+    delete:
+      tags:
+        - Navigation
+      summary: Remove Role from Navigation
+      description: |
+        Entfernt Role-Zuweisung von Navigation.
+        **Erfordert Permission: `navigation.manage`**
+        **Erfordert CSRF-Token im Header: `X-CSRF-Token`**
+      operationId: removeRoleFromNavigation
+      parameters:
+        - name: navigationId
+          in: path
+          required: true
+          description: Navigation ID
+          schema:
+            type: integer
+            example: 1
+        - name: roleId
+          in: path
+          required: true
+          description: Role ID
+          schema:
+            type: integer
+            example: 2
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      responses:
+        '200':
+          description: Role-Zuweisung erfolgreich entfernt
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Role removed successfully
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Navigation oder Role nicht gefunden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ==================== EMAIL ====================
+  /email-messages:
+    get:
+      tags:
+        - Email
+      summary: List Email Messages
+      description: |
+        Gibt Liste aller Email-Messages des aktuellen Users zurück.
+        Unterstützt Filtering, Pagination und Sorting.
+      operationId: listEmailMessages
+      parameters:
+        - name: folder_id
+          in: query
+          description: Filter nach Folder ID
+          schema:
+            type: integer
+        - name: is_read
+          in: query
+          description: Filter nach Lese-Status
+          schema:
+            type: boolean
+        - name: has_attachments
+          in: query
+          description: Filter nach Anhängen
+          schema:
+            type: boolean
+        - name: tag
+          in: query
+          description: Filter nach Tag
+          schema:
+            type: string
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - name: sort
+          in: query
+          description: Sortier-Feld
+          schema:
+            type: string
+            enum: [date, from, subject]
+            default: date
+        - name: order
+          in: query
+          description: Sortier-Reihenfolge
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+      responses:
+        '200':
+          description: Email-Messages Liste
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EmailMessage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /email-messages/{messageId}:
+    get:
+      tags:
+        - Email
+      summary: Get Email Message by ID
+      operationId: getEmailMessageById
+      parameters:
+        - name: messageId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Email Message gefunden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailMessage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags:
+        - Email
+      summary: Update Email Message
+      description: Aktualisiert Email-Properties (z.B. is_read, tags)
+      operationId: updateEmailMessage
+      parameters:
+        - name: messageId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                is_read:
+                  type: boolean
+                tags:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: Message aktualisiert
+
+    delete:
+      tags:
+        - Email
+      summary: Delete Email Message
+      operationId: deleteEmailMessage
+      parameters:
+        - name: messageId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      responses:
+        '200':
+          description: Message gelöscht
+
+  /email-messages/sync:
+    post:
+      tags:
+        - Email
+      summary: Sync Email Messages
+      description: Synchronisiert Emails vom IMAP-Server
+      operationId: syncEmailMessages
+      parameters:
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      responses:
+        '200':
+          description: Sync erfolgreich
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  synced_count:
+                    type: integer
+
+  # ==================== WAREHOUSE ====================
+  /warehouse-items:
+    get:
+      tags:
+        - Warehouse
+      summary: List Warehouse Items
+      description: Gibt Liste aller Warehouse Items zurück
+      operationId: listWarehouseItems
+      parameters:
+        - name: location_id
+          in: query
+          description: Filter nach Location ID
+          schema:
+            type: integer
+        - name: is_available
+          in: query
+          description: Filter nach Verfügbarkeit
+          schema:
+            type: boolean
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Warehouse Items Liste
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WarehouseItem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags:
+        - Warehouse
+      summary: Create Warehouse Item
+      description: Erstellt neues Warehouse Item
+      operationId: createWarehouseItem
+      parameters:
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WarehouseItemInput'
+      responses:
+        '201':
+          description: Item erstellt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WarehouseItem'
+        '403':
+          $ref: '#/components/responses/CsrfError'
+
+  /warehouse-items/{itemId}:
+    get:
+      tags:
+        - Warehouse
+      summary: Get Warehouse Item by ID
+      operationId: getWarehouseItemById
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Item gefunden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WarehouseItem'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags:
+        - Warehouse
+      summary: Update Warehouse Item
+      operationId: updateWarehouseItem
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WarehouseItemInput'
+      responses:
+        '200':
+          description: Item aktualisiert
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WarehouseItem'
+        '403':
+          $ref: '#/components/responses/CsrfError'
+
+    delete:
+      tags:
+        - Warehouse
+      summary: Delete Warehouse Item
+      operationId: deleteWarehouseItem
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      responses:
+        '200':
+          description: Item gelöscht
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+        '403':
+          $ref: '#/components/responses/CsrfError'
+
+  /warehouse-locations:
+    get:
+      tags:
+        - Warehouse
+      summary: List Warehouse Locations
+      operationId: listWarehouseLocations
+      responses:
+        '200':
+          description: Locations Liste
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WarehouseLocation'
+
+  # ==================== ARTICLES ====================
+  /articles:
+    get:
+      tags:
+        - Articles
+      summary: List Articles
+      description: Gibt Liste aller Articles zurück
+      operationId: listArticles
+      parameters:
+        - name: is_published
+          in: query
+          description: Filter nach Veröffentlichungs-Status
+          schema:
+            type: boolean
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Articles Liste
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Article'
+
+    post:
+      tags:
+        - Articles
+      summary: Create Article
+      operationId: createArticle
+      parameters:
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ArticleInput'
+      responses:
+        '201':
+          description: Article erstellt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Article'
+        '403':
+          $ref: '#/components/responses/CsrfError'
+
+  /articles/{articleId}:
+    put:
+      tags:
+        - Articles
+      summary: Update Article
+      operationId: updateArticle
+      parameters:
+        - name: articleId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ArticleInput'
+      responses:
+        '200':
+          description: Article aktualisiert
+
+    delete:
+      tags:
+        - Articles
+      summary: Delete Article
+      operationId: deleteArticle
+      parameters:
+        - name: articleId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      responses:
+        '200':
+          description: Article gelöscht
+
+  # ==================== PROFILES ====================
+  /profiles:
+    get:
+      tags:
+        - Profiles
+      summary: List User Profiles
+      operationId: listProfiles
+      responses:
+        '200':
+          description: Profiles Liste
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Profile'
+
+  # ==================== UTILITY ====================
+  /schema:
+    get:
+      tags:
+        - System
+      summary: Get Database Schema
+      description: |
+        Gibt die Datenbank-Schema-Informationen für eine Tabelle zurück.
+        **Keine Authentication erforderlich**
+      operationId: getSchema
+      security: []
+      parameters:
+        - name: table
+          in: query
+          required: true
+          description: Tabellenname (ohne Präfix)
+          schema:
+            type: string
+            example: users
+      responses:
+        '200':
+          description: Schema-Informationen
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  table:
+                    type: string
+                  columns:
+                    type: array
+                    items:
+                      type: object
+
+  /tables:
+    get:
+      tags:
+        - System
+      summary: List Database Tables
+      description: |
+        Gibt Liste aller verfügbaren Datenbank-Tabellen zurück.
+        **Keine Authentication erforderlich**
+      operationId: listTables
+      security: []
+      responses:
+        '200':
+          description: Tabellen-Liste
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                example: ["users", "roles", "permissions", "navigations"]
+
+  /debug:
+    get:
+      tags:
+        - System
+      summary: Debug Information
+      description: |
+        Debug-Informationen (nur im DEBUG-Modus verfügbar).
+        **Keine Authentication erforderlich**
+      operationId: getDebugInfo
+      security: []
+      responses:
+        '200':
+          description: Debug-Informationen
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /auth/register:
+    post:
+      tags:
+        - Authentication
+      summary: User Registration
+      description: |
+        Registriert einen neuen User.
+        **Keine Authentication erforderlich**
+        **Erfordert CSRF-Token**
+      operationId: register
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+                - username
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  format: password
+                  minLength: 8
+                username:
+                  type: string
+                  minLength: 3
+                first_name:
+                  type: string
+                last_name:
+                  type: string
+      responses:
+        '201':
+          description: User erfolgreich registriert
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  user:
+                    $ref: '#/components/schemas/User'
+        '400':
+          description: Validierungsfehler
+
+  /email-folders:
+    get:
+      tags:
+        - Email
+      summary: List Email Folders
+      description: Gibt Liste aller Email-Ordner des Users zurück
+      operationId: listEmailFolders
+      responses:
+        '200':
+          description: Folder-Liste
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    folder_id:
+                      type: integer
+                    name:
+                      type: string
+                      example: INBOX
+                    count:
+                      type: integer
+
+  /docs:
+    get:
+      tags:
+        - System
+      summary: API Documentation (Swagger UI)
+      description: |
+        Interaktive API-Dokumentation mit Swagger UI.
+        **Keine Authentication erforderlich**
+      operationId: getDocs
+      security: []
+      responses:
+        '200':
+          description: Swagger UI HTML
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /openapi.yaml:
+    get:
+      tags:
+        - System
+      summary: OpenAPI Specification
+      description: |
+        OpenAPI 3.0 Spezifikation (YAML-Format).
+        **Keine Authentication erforderlich**
+      operationId: getOpenApiSpec
+      security: []
+      responses:
+        '200':
+          description: OpenAPI YAML
+          content:
+            application/x-yaml:
+              schema:
+                type: string
+
+  # ==================== SYSTEM ====================
+  /health:
+    get:
+      tags:
+        - System
+      summary: Health Check
+      description: |
+        System Health Status für Monitoring.
+        **Keine Authentication erforderlich**
+      operationId: healthCheck
+      security: []  # No authentication required
+      responses:
+        '200':
+          description: System gesund
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+        '503':
+          description: System ungesund
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+
+# ==================== COMPONENTS ====================
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: jwt_token
+      description: JWT-Token in HttpOnly Cookie
+
+    csrfToken:
+      type: apiKey
+      in: header
+      name: X-CSRF-Token
+      description: CSRF-Token für POST/PUT/DELETE Requests
+
+  parameters:
+    UserIdParam:
+      name: userId
+      in: path
+      required: true
+      description: User ID
+      schema:
+        type: integer
+        example: 1
+
+    PageParam:
+      name: page
+      in: query
+      description: Seiten-Nummer (Pagination)
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+
+    LimitParam:
+      name: limit
+      in: query
+      description: Anzahl Einträge pro Seite
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+
+    CsrfTokenHeader:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      description: CSRF-Token von Login-Response
+      schema:
+        type: string
+
+  schemas:
+    User:
+      type: object
+      properties:
+        users_id:
+          type: integer
+          example: 1
+        email:
+          type: string
+          format: email
+          example: user@example.com
+        username:
+          type: string
+          example: john_doe
+        first_name:
+          type: string
+          nullable: true
+          example: John
+        last_name:
+          type: string
+          nullable: true
+          example: Doe
+        is_active:
+          type: boolean
+          example: true
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/Role'
+        permissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Permission'
+        created_at:
+          type: string
+          format: date-time
+          example: '2025-01-01T12:00:00Z'
+        last_login:
+          type: string
+          format: date-time
+          nullable: true
+          example: '2025-12-24T10:30:00Z'
+
+    Role:
+      type: object
+      properties:
+        roles_id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: admin
+        display_name:
+          type: string
+          example: Administrator
+        description:
+          type: string
+          nullable: true
+          example: Full system access
+        permissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Permission'
+
+    Permission:
+      type: object
+      properties:
+        permissions_id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: articles.create.own
+        resource:
+          type: string
+          example: articles
+        action:
+          type: string
+          enum: [create, read, update, delete]
+          example: create
+        scope:
+          type: string
+          enum: [own, any]
+          example: own
+        description:
+          type: string
+          nullable: true
+          example: Allows creating own articles
+
+    Navigation:
+      type: object
+      properties:
+        navigations_id:
+          type: integer
+          example: 1
+        parent_id:
+          type: integer
+          nullable: true
+          example: null
+          description: ID des Parent-Navigation-Items (null für Top-Level)
+        title:
+          type: string
+          example: Dashboard
+          description: Anzeige-Text des Navigation-Items
+        route:
+          type: string
+          example: /dashboard
+          description: Angular Route oder externe URL
+        icon:
+          type: string
+          nullable: true
+          example: dashboard
+          description: Material Icon Name
+        permission_id:
+          type: integer
+          nullable: true
+          example: 5
+          description: Erforderliche Permission (null = für alle sichtbar)
+        sort_order:
+          type: integer
+          example: 10
+          description: Sortierreihenfolge
+        is_active:
+          type: boolean
+          example: true
+        is_external:
+          type: boolean
+          example: false
+          description: true für externe Links
+        target:
+          type: string
+          nullable: true
+          example: _blank
+          description: Link-Target (_blank für neues Fenster)
+        css_class:
+          type: string
+          nullable: true
+          example: highlight
+        badge_text:
+          type: string
+          nullable: true
+          example: NEW
+        badge_class:
+          type: string
+          nullable: true
+          example: badge-primary
+        created_at:
+          type: string
+          format: date-time
+          example: '2025-01-01T12:00:00Z'
+        updated_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: '2025-12-24T10:30:00Z'
+
+    NavigationRoleAssignment:
+      type: object
+      properties:
+        navigation_id:
+          type: integer
+          example: 1
+        role_id:
+          type: integer
+          example: 2
+        assigned_at:
+          type: string
+          format: date-time
+          example: '2025-12-24T10:00:00Z'
+        assigned_by:
+          type: integer
+          nullable: true
+          example: 1
+          description: User ID der Person, die die Zuweisung vorgenommen hat
+        navigation_title:
+          type: string
+          example: Dashboard
+          description: Nur vorhanden wenn nach role_id gefiltert wurde
+        role_name:
+          type: string
+          example: admin
+          description: Nur vorhanden wenn nach navigation_id gefiltert wurde
+        role_display_name:
+          type: string
+          example: Administrator
+          description: Nur vorhanden wenn nach navigation_id gefiltert wurde
+
+    EmailMessage:
+      type: object
+      properties:
+        email_messages_id:
+          type: integer
+          example: 1
+        user_id:
+          type: integer
+        folder_id:
+          type: integer
+        message_uid:
+          type: string
+          description: IMAP UID
+        subject:
+          type: string
+          example: Meeting Tomorrow
+        from_address:
+          type: string
+          example: sender@example.com
+        to_address:
+          type: string
+        date:
+          type: string
+          format: date-time
+        body_text:
+          type: string
+        body_html:
+          type: string
+        is_read:
+          type: boolean
+        has_attachments:
+          type: boolean
+        tags:
+          type: array
+          items:
+            type: string
+
+    WarehouseItem:
+      type: object
+      properties:
+        warehouse_items_id:
+          type: integer
+        location_id:
+          type: integer
+        name:
+          type: string
+          example: Laptop Dell XPS 15
+        sku:
+          type: string
+          example: DELL-XPS15-2024
+        description:
+          type: string
+        quantity:
+          type: integer
+          example: 5
+        unit:
+          type: string
+          example: pieces
+        is_available:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    WarehouseItemInput:
+      type: object
+      required:
+        - name
+        - location_id
+      properties:
+        location_id:
+          type: integer
+        name:
+          type: string
+        sku:
+          type: string
+        description:
+          type: string
+        quantity:
+          type: integer
+        unit:
+          type: string
+        is_available:
+          type: boolean
+
+    WarehouseLocation:
+      type: object
+      properties:
+        warehouse_locations_id:
+          type: integer
+        name:
+          type: string
+          example: Warehouse A - Shelf 3
+        description:
+          type: string
+
+    Article:
+      type: object
+      properties:
+        articles_id:
+          type: integer
+        title:
+          type: string
+          example: How to use the API
+        content:
+          type: string
+        author_id:
+          type: integer
+        is_published:
+          type: boolean
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    ArticleInput:
+      type: object
+      required:
+        - title
+        - content
+      properties:
+        title:
+          type: string
+        content:
+          type: string
+        is_published:
+          type: boolean
+
+    Profile:
+      type: object
+      properties:
+        profiles_id:
+          type: integer
+        user_id:
+          type: integer
+        display_name:
+          type: string
+        bio:
+          type: string
+        avatar_url:
+          type: string
+
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy, error]
+          example: healthy
+        timestamp:
+          type: string
+          format: date-time
+          example: '2025-12-24T12:00:00Z'
+        checks:
+          type: object
+          properties:
+            database:
+              $ref: '#/components/schemas/HealthCheck'
+            session:
+              $ref: '#/components/schemas/HealthCheck'
+            filesystem:
+              $ref: '#/components/schemas/HealthCheck'
+            environment:
+              $ref: '#/components/schemas/HealthCheck'
+        system:
+          type: object
+          properties:
+            php_version:
+              type: string
+              example: '8.2.0'
+            memory_usage:
+              type: string
+              example: 10.5 MB
+            memory_peak:
+              type: string
+              example: 12.3 MB
+            uptime:
+              type: string
+              example: 5 days
+
+    HealthCheck:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [ok, warning, error]
+          example: ok
+        message:
+          type: string
+          example: Database connection successful
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          example: Unauthorized
+        message:
+          type: string
+          example: Invalid email or password
+
+  responses:
+    BadRequest:
+      description: Ungültige Anfrage / Validierungsfehler
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Bad Request
+            message: Invalid input data
+
+    Unauthorized:
+      description: Nicht authentifiziert
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Unauthorized
+            message: Authentication required
+
+    Forbidden:
+      description: Keine Berechtigung
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Forbidden
+            message: Insufficient permissions
+
+    NotFound:
+      description: Ressource nicht gefunden
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Not Found
+            message: Resource not found
+
+    CsrfError:
+      description: CSRF-Token fehlt oder ungültig
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Forbidden
+            message: Invalid or missing CSRF token
+
