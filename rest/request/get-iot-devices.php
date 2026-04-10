@@ -1,6 +1,6 @@
-// SPDX-License-Identifier: LicenseRef-OliverLohkemper-Proprietary
 <?php
 declare(strict_types=1);
+// SPDX-License-Identifier: LicenseRef-OliverLohkemper-Proprietary
 
 if (!STOKEN) die('SEC');
 
