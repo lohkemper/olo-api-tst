@@ -589,6 +589,8 @@ class request {
     $subroute = $this->request['subroute'] ?? '';
     global $_PUT;
 
+    $this->normalizeIotPathId($subroute);
+
     // POST /iot/register
     if ($subroute === 'register' && $this->methode === 'POST') {
         $handler = new requestPostIotRegister($this->pdo, '');
@@ -646,6 +648,25 @@ class request {
     }
 
     return false;
+  }
+
+  /**
+   * Der allgemeine Parser kippt die trailing numerische ID im Pfad
+   * /iot/{subroute}/{id} nach 'groupby'. Für die IoT-Detail-Endpoints
+   * holen wir sie hier zurück nach 'id', ohne andere Routen anzufassen.
+   */
+  private function normalizeIotPathId(string $subroute): void {
+    if (!in_array($subroute, ['devices', 'data', 'networks'], true)) {
+        return;
+    }
+    if (isset($this->request['id'])) {
+        return;
+    }
+    $groupby = $this->request['groupby'] ?? null;
+    if ($groupby !== null && ctype_digit((string)$groupby)) {
+        $this->request['id'] = (int)$groupby;
+        unset($this->request['groupby']);
+    }
   }
 
   /**
