@@ -55,6 +55,7 @@ include('delete.php');
 include('post-iot-register.php');
 include('post-iot-heartbeat.php');
 include('post-iot-data-sync.php');
+include('post-iot-pi-sync.php');
 include('get-iot-devices.php');
 include('get-iot-data.php');
 include('get-iot-networks.php');
@@ -610,6 +611,14 @@ class request {
     // POST /iot/data-sync
     if ($subroute === 'data-sync' && $this->methode === 'POST') {
         $handler = new requestPostIotDataSync($this->pdo, '');
+        $handler->setData($_PUT ?? []);
+        $handler->execute();
+        return true;
+    }
+
+    // POST /iot/pi-sync
+    if ($subroute === 'pi-sync' && $this->methode === 'POST') {
+        $handler = new requestPostIotPiSync($this->pdo, '');
         $handler->setData($_PUT ?? []);
         $handler->execute();
         return true;
