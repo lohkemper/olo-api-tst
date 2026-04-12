@@ -138,7 +138,7 @@ resp=$(post_sync "$PI_API_KEY" "$payload")
 http_code=$(echo "$resp" | tail -n1)
 body=$(echo "$resp" | sed '$d')
 assert "HTTP 400 for missing wert" "$([[ "$http_code" == "400" ]] && echo true || echo false)"
-assert "Error mentions wert"        "$(echo "$body" | grep -q '\"wert\"\\|wert' && echo true || echo false)"
+assert "Error mentions wert"        "$(echo "$body" | grep -q 'wert' && echo true || echo false)"
 echo
 
 # ---- Test 8: Valid full sync -> 200, row inserted, idempotent on retry ----
