@@ -7,11 +7,11 @@ if (!STOKEN) die('SEC');
 /**
  * POST /iot/pi-sync
  *
- * Empfängt kumulierte Sensordaten vom Raspberry Pi für ALLE Devices
- * in seinem Netzwerk. Nur Devices vom Typ "pi" dürfen diesen Endpoint
+ * Empfaengt kumulierte Sensordaten vom Raspberry Pi fuer ALLE Devices
+ * in seinem Netzwerk. Nur Devices vom Typ "pi" duerfen diesen Endpoint
  * nutzen — ESPs nutzen weiterhin POST /iot/data-sync mit ihrem eigenen Key.
  *
- * Auth: X-Api-Key Header (muss einem Device mit typ="pi" gehören)
+ * Auth: X-Api-Key Header (muss einem Device mit typ="pi" gehoeren)
  *
  * Body:
  * {
@@ -48,37 +48,10 @@ class requestPostIotPiSync extends RequestBase {
         try {
             header('Content-Type: application/json; charset=utf-8');
 
-            // Authenticate via API key
-            $apiKey = $_SERVER['HTTP_X_API_KEY'] ?? '';
-            if (empty($apiKey)) {
-                http_response_code(401);
-                echo json_encode(['error' => 'Missing X-Api-Key header']);
+            $piDevice = $this->authenticatePi();
+            if ($piDevice === null) {
                 return;
             }
-
-            // Find device by API key — must be typ=pi
-            $stmt = $this->pdo->prepare(
-                'SELECT iot_devices_id, typ FROM mbc_iot_devices WHERE api_key = ?'
-            );
-            $stmt->execute([$apiKey]);
-            $piDevice = $stmt->fetch();
-
-            if (!$piDevice) {
-                http_response_code(401);
-                echo json_encode(['error' => 'Invalid API key']);
-                return;
-            }
-
-            if ($piDevice['typ'] !== 'pi') {
-                http_response_code(403);
-                echo json_encode(['error' => 'Only devices with typ=pi may use pi-sync']);
-                return;
-            }
-
-            // Update Pi heartbeat
-            $this->pdo->prepare(
-                'UPDATE mbc_iot_devices SET last_heartbeat = NOW(), online_status = ? WHERE iot_devices_id = ?'
-            )->execute(['online', $piDevice['iot_devices_id']]);
 
             $devices = $this->data['devices'] ?? [];
             if (empty($devices) || !is_array($devices)) {
@@ -87,82 +60,25 @@ class requestPostIotPiSync extends RequestBase {
                 return;
             }
 
-            // Prepare statements
-            $findDevice = $this->pdo->prepare(
-                'SELECT iot_devices_id FROM mbc_iot_devices WHERE chip_id = ?'
-            );
-            $insertData = $this->pdo->prepare(
-                'INSERT INTO mbc_iot_sensor_data (mbc_iot_devices, sensor_key, wert, min_wert, max_wert, avg_wert, anzahl_messungen, zeitstempel)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-            );
-            $updateHeartbeat = $this->pdo->prepare(
-                'UPDATE mbc_iot_devices SET last_heartbeat = NOW(), online_status = ? WHERE iot_devices_id = ?'
-            );
+            $this->touchHeartbeat((int)$piDevice['iot_devices_id']);
 
             $this->pdo->beginTransaction();
-            $totalInserted = 0;
-            $devicesProcessed = 0;
-            $errors = [];
-
-            foreach ($devices as $deviceEntry) {
-                $chipId = trim($deviceEntry['chip_id'] ?? '');
-                $dataPoints = $deviceEntry['data'] ?? [];
-
-                if (empty($chipId)) {
-                    $errors[] = 'Skipped entry with empty chip_id';
-                    continue;
-                }
-
-                // Resolve chip_id to device_id
-                $findDevice->execute([$chipId]);
-                $device = $findDevice->fetch();
-                if (!$device) {
-                    $errors[] = "Unknown chip_id: {$chipId}";
-                    continue;
-                }
-
-                $deviceId = (int)$device['iot_devices_id'];
-
-                // Update device heartbeat (the Pi reports on behalf of the ESP)
-                $updateHeartbeat->execute(['online', $deviceId]);
-
-                if (empty($dataPoints) || !is_array($dataPoints)) {
-                    $devicesProcessed++;
-                    continue;
-                }
-
-                foreach ($dataPoints as $point) {
-                    if (empty($point['sensor_key']) || !isset($point['wert'])) {
-                        continue;
-                    }
-
-                    $insertData->execute([
-                        $deviceId,
-                        trim($point['sensor_key']),
-                        (float)$point['wert'],
-                        isset($point['min_wert']) ? (float)$point['min_wert'] : null,
-                        isset($point['max_wert']) ? (float)$point['max_wert'] : null,
-                        isset($point['avg_wert']) ? (float)$point['avg_wert'] : null,
-                        (int)($point['anzahl_messungen'] ?? 1),
-                        $point['zeitstempel'] ?? date('c')
-                    ]);
-                    $totalInserted++;
-                }
-                $devicesProcessed++;
+            $result = $this->processDevices($devices);
+            if ($result === null) {
+                // Validation error inside processDevices — response already sent, rollback done
+                return;
             }
-
             $this->pdo->commit();
 
             $response = [
                 'status' => 'ok',
-                'devices_processed' => $devicesProcessed,
-                'data_points_inserted' => $totalInserted,
+                'devices_processed' => $result['devicesProcessed'],
+                'data_points_inserted' => $result['totalInserted'],
                 'timestamp' => date('c')
             ];
-            if (!empty($errors)) {
-                $response['warnings'] = $errors;
+            if (!empty($result['warnings'])) {
+                $response['warnings'] = $result['warnings'];
             }
-
             echo json_encode($response);
 
         } catch (\Throwable $e) {
@@ -171,5 +87,141 @@ class requestPostIotPiSync extends RequestBase {
             }
             $this->handleError('Error in pi-sync', $e);
         }
+    }
+
+    /**
+     * Validate X-Api-Key and return pi device row, or null (HTTP already sent).
+     */
+    private function authenticatePi(): ?array {
+        $apiKey = $_SERVER['HTTP_X_API_KEY'] ?? '';
+        if (empty($apiKey)) {
+            http_response_code(401);
+            echo json_encode(['error' => 'Missing X-Api-Key header']);
+            return null;
+        }
+
+        $stmt = $this->pdo->prepare('SELECT iot_devices_id, typ FROM mbc_iot_devices WHERE api_key = ?');
+        $stmt->execute([$apiKey]);
+        $device = $stmt->fetch();
+
+        if (!$device) {
+            http_response_code(401);
+            echo json_encode(['error' => 'Invalid API key']);
+            return null;
+        }
+        if ($device['typ'] !== 'pi') {
+            http_response_code(403);
+            echo json_encode(['error' => 'Only devices with typ=pi may use pi-sync']);
+            return null;
+        }
+        return $device;
+    }
+
+    private function touchHeartbeat(int $deviceId): void {
+        $this->pdo->prepare(
+            'UPDATE mbc_iot_devices SET last_heartbeat = NOW(), online_status = ? WHERE iot_devices_id = ?'
+        )->execute(['online', $deviceId]);
+    }
+
+    /**
+     * Iterate devices and data points. Returns stats array on success,
+     * or null if a validation error occurred (HTTP response already sent).
+     */
+    private function processDevices(array $devices): ?array {
+        $findDevice = $this->pdo->prepare(
+            'SELECT iot_devices_id FROM mbc_iot_devices WHERE chip_id = ?'
+        );
+        $insertData = $this->pdo->prepare(
+            'INSERT INTO mbc_iot_sensor_data (mbc_iot_devices, sensor_key, wert, min_wert, max_wert, avg_wert, anzahl_messungen, zeitstempel)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE
+                wert = VALUES(wert),
+                min_wert = VALUES(min_wert),
+                max_wert = VALUES(max_wert),
+                avg_wert = VALUES(avg_wert),
+                anzahl_messungen = VALUES(anzahl_messungen)'
+        );
+        $updateHeartbeat = $this->pdo->prepare(
+            'UPDATE mbc_iot_devices SET last_heartbeat = NOW(), online_status = ? WHERE iot_devices_id = ?'
+        );
+
+        $totalInserted = 0;
+        $devicesProcessed = 0;
+        $warnings = [];
+
+        foreach ($devices as $deviceEntry) {
+            $chipId = trim($deviceEntry['chip_id'] ?? '');
+            $dataPoints = $deviceEntry['data'] ?? [];
+
+            if (empty($chipId)) {
+                $warnings[] = 'Skipped entry with empty chip_id';
+                continue;
+            }
+
+            $findDevice->execute([$chipId]);
+            $device = $findDevice->fetch();
+            if (!$device) {
+                $warnings[] = "Unknown chip_id: {$chipId}";
+                continue;
+            }
+
+            $deviceId = (int)$device['iot_devices_id'];
+            $updateHeartbeat->execute(['online', $deviceId]);
+
+            if (empty($dataPoints) || !is_array($dataPoints)) {
+                $devicesProcessed++;
+                continue;
+            }
+
+            $inserted = $this->insertDataPoints($insertData, $deviceId, $chipId, $dataPoints);
+            if ($inserted === null) {
+                return null;
+            }
+            $totalInserted += $inserted;
+            $devicesProcessed++;
+        }
+
+        return [
+            'totalInserted' => $totalInserted,
+            'devicesProcessed' => $devicesProcessed,
+            'warnings' => $warnings,
+        ];
+    }
+
+    /**
+     * Insert all data points for a device. Returns count or null on validation error.
+     */
+    private function insertDataPoints(PDOStatement $insertData, int $deviceId, string $chipId, array $dataPoints): ?int {
+        $count = 0;
+        foreach ($dataPoints as $idx => $point) {
+            $missing = [];
+            if (empty($point['sensor_key'])) {
+                $missing[] = 'sensor_key';
+            }
+            if (!isset($point['wert'])) {
+                $missing[] = 'wert';
+            }
+            if (!empty($missing)) {
+                $this->pdo->rollBack();
+                http_response_code(400);
+                echo json_encode([
+                    'error' => "Device '{$chipId}' data[{$idx}] missing required fields: " . implode(', ', $missing)
+                ]);
+                return null;
+            }
+
+            $insertData->execute([
+                $deviceId,
+                trim($point['sensor_key']),
+                (float)$point['wert'],
+                isset($point['min_wert']) ? (float)$point['min_wert'] : null,
+                isset($point['max_wert']) ? (float)$point['max_wert'] : null,
+                isset($point['avg_wert']) ? (float)$point['avg_wert'] : null,
+                (int)($point['anzahl_messungen'] ?? 1),
+                $point['zeitstempel'] ?? date('c')
+            ]);
+            $count++;
+        }
+        return $count;
     }
 }
