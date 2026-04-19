@@ -46,9 +46,7 @@ class requestPostIotPiSync extends RequestBase {
 
     public function execute(): void {
         try {
-            header('Content-Type: application/json; charset=utf-8');
-
-            $piDevice = $this->authenticatePi();
+            $piDevice = ApiKeyAuth::authenticateDevice($this->pdo, ['pi']);
             if ($piDevice === null) {
                 return;
             }
@@ -87,34 +85,6 @@ class requestPostIotPiSync extends RequestBase {
             }
             $this->handleError('Error in pi-sync', $e);
         }
-    }
-
-    /**
-     * Validate X-Api-Key and return pi device row, or null (HTTP already sent).
-     */
-    private function authenticatePi(): ?array {
-        $apiKey = $_SERVER['HTTP_X_API_KEY'] ?? '';
-        if (empty($apiKey)) {
-            http_response_code(401);
-            echo json_encode(['error' => 'Missing X-Api-Key header']);
-            return null;
-        }
-
-        $stmt = $this->pdo->prepare('SELECT iot_devices_id, typ FROM mbc_iot_devices WHERE api_key_hash = ?');
-        $stmt->execute([hash('sha256', $apiKey)]);
-        $device = $stmt->fetch();
-
-        if (!$device) {
-            http_response_code(401);
-            echo json_encode(['error' => 'Invalid API key']);
-            return null;
-        }
-        if ($device['typ'] !== 'pi') {
-            http_response_code(403);
-            echo json_encode(['error' => 'Only devices with typ=pi may use pi-sync']);
-            return null;
-        }
-        return $device;
     }
 
     private function touchHeartbeat(int $deviceId): void {
