@@ -19,6 +19,28 @@
 </IfModule>
 
 # ============================================================================
+# HTTPS Detection + Enforcement (STORY-2.5 TASK-2.5.1)
+# ============================================================================
+# Ionos terminiert SSL am Reverse-Proxy, daher liefert %{HTTPS} nicht immer
+# "on". Wir setzen die Env-Variable HTTPS_ACTIVE via mod_rewrite [E=...],
+# damit Header-Direktiven verlaesslich darauf zugreifen koennen.
+# HTTP-Requests werden per 301 auf HTTPS umgeleitet (ausser localhost).
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+
+  # Mark request as HTTPS (direct or via reverse proxy)
+  RewriteCond %{HTTPS} =on [OR]
+  RewriteCond %{HTTP:X-Forwarded-Proto} =https
+  RewriteRule ^ - [E=HTTPS_ACTIVE:1]
+
+  # Force HTTPS redirect (skip localhost for local dev)
+  RewriteCond %{ENV:HTTPS_ACTIVE} !=1
+  RewriteCond %{HTTP_HOST} !^localhost [NC]
+  RewriteCond %{HTTP_HOST} !^127\.0\.0\.1
+  RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+</IfModule>
+
+# ============================================================================
 # Handle OPTIONS Preflight Request
 # ============================================================================
 <IfModule mod_rewrite.c>
@@ -43,4 +65,8 @@
   Header always set X-Content-Type-Options "nosniff"
   Header always set X-Frame-Options "SAMEORIGIN"
   Header always set X-XSS-Protection "1; mode=block"
+
+  # HSTS - only on HTTPS responses (RFC 6797: MUST NOT send over plain HTTP)
+  # expr= wird zur Response-Zeit ausgewertet und ueberlebt interne Rewrites.
+  Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains" "expr=%{HTTPS} == 'on' || %{HTTP:X-Forwarded-Proto} == 'https'"
 </IfModule>
