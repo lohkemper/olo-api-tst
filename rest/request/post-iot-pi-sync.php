@@ -100,8 +100,8 @@ class requestPostIotPiSync extends RequestBase {
             return null;
         }
 
-        $stmt = $this->pdo->prepare('SELECT iot_devices_id, typ FROM mbc_iot_devices WHERE api_key = ?');
-        $stmt->execute([$apiKey]);
+        $stmt = $this->pdo->prepare('SELECT iot_devices_id, typ FROM mbc_iot_devices WHERE api_key_hash = ?');
+        $stmt->execute([hash('sha256', $apiKey)]);
         $device = $stmt->fetch();
 
         if (!$device) {

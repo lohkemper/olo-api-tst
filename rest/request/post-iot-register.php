@@ -39,10 +39,11 @@ class requestPostIotRegister extends RequestBase {
             }
 
             $apiKey = bin2hex(random_bytes(32));
+            $apiKeyHash = hash('sha256', $apiKey);
 
             $this->pdo->beginTransaction();
 
-            $deviceId = $this->upsertDevice($validated, $networkId, $apiKey);
+            $deviceId = $this->upsertDevice($validated, $networkId, $apiKey, $apiKeyHash);
             $this->insertSensoren($deviceId, $validated['sensoren']);
             $this->insertAktoren($deviceId, $validated['aktoren']);
 
@@ -151,7 +152,7 @@ class requestPostIotRegister extends RequestBase {
     /**
      * Insert or update device. Returns the device ID.
      */
-    private function upsertDevice(array &$validated, int $networkId, string $apiKey): int {
+    private function upsertDevice(array &$validated, int $networkId, string $apiKey, string $apiKeyHash): int {
         $stmt = $this->pdo->prepare(
             'SELECT iot_devices_id FROM mbc_iot_devices WHERE chip_id = ?'
         );
@@ -162,12 +163,12 @@ class requestPostIotRegister extends RequestBase {
             $deviceId = (int)$existing['iot_devices_id'];
             $stmt = $this->pdo->prepare(
                 'UPDATE mbc_iot_devices SET name = ?, typ = ?, firmware_version = ?,
-                 mbc_iot_networks = ?, api_key = ?, online_status = ?, updated_at = NOW()
+                 mbc_iot_networks = ?, api_key = ?, api_key_hash = ?, online_status = ?, updated_at = NOW()
                  WHERE iot_devices_id = ?'
             );
             $stmt->execute([
                 $validated['name'], $validated['typ'], $validated['firmwareVersion'],
-                $networkId, $apiKey, 'online', $deviceId
+                $networkId, $apiKey, $apiKeyHash, 'online', $deviceId
             ]);
 
             $this->pdo->prepare('DELETE FROM mbc_iot_sensoren WHERE mbc_iot_devices = ?')->execute([$deviceId]);
@@ -175,12 +176,12 @@ class requestPostIotRegister extends RequestBase {
             $validated['isReRegistration'] = true;
         } else {
             $stmt = $this->pdo->prepare(
-                'INSERT INTO mbc_iot_devices (chip_id, name, typ, firmware_version, mbc_iot_networks, api_key, online_status, last_heartbeat)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, NOW())'
+                'INSERT INTO mbc_iot_devices (chip_id, name, typ, firmware_version, mbc_iot_networks, api_key, api_key_hash, online_status, last_heartbeat)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())'
             );
             $stmt->execute([
                 $validated['chipId'], $validated['name'], $validated['typ'],
-                $validated['firmwareVersion'], $networkId, $apiKey, 'online'
+                $validated['firmwareVersion'], $networkId, $apiKey, $apiKeyHash, 'online'
             ]);
             $deviceId = (int)$this->pdo->lastInsertId();
         }

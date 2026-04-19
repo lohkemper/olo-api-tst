@@ -41,11 +41,11 @@ class requestPostIotDataSync extends RequestBase {
                 return;
             }
 
-            // Find device by API key
+            // Find device by API key (validate via hash — TASK-2.5.2)
             $stmt = $this->pdo->prepare(
-                'SELECT iot_devices_id FROM mbc_iot_devices WHERE api_key = ?'
+                'SELECT iot_devices_id FROM mbc_iot_devices WHERE api_key_hash = ?'
             );
-            $stmt->execute([$apiKey]);
+            $stmt->execute([hash('sha256', $apiKey)]);
             $device = $stmt->fetch();
 
             if (!$device) {
