@@ -28,6 +28,10 @@ class requestPostIotHeartbeat extends RequestBase {
                 return;
             }
 
+            (new RateLimiter($this->pdo))->requireLimit(
+                'iot/heartbeat:' . (int)$device['iot_devices_id'], 60, 60
+            );
+
             // Update heartbeat
             $stmt = $this->pdo->prepare(
                 'UPDATE mbc_iot_devices SET last_heartbeat = NOW(), online_status = ? WHERE iot_devices_id = ?'

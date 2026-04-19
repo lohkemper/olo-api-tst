@@ -51,6 +51,10 @@ class requestPostIotPiSync extends RequestBase {
                 return;
             }
 
+            (new RateLimiter($this->pdo))->requireLimit(
+                'iot/pi-sync:' . (int)$piDevice['iot_devices_id'], 20, 60
+            );
+
             $devices = $this->data['devices'] ?? [];
             if (empty($devices) || !is_array($devices)) {
                 http_response_code(400);

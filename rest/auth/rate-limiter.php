@@ -30,7 +30,7 @@ class RateLimiter {
                 attempts INT NOT NULL DEFAULT 1,
                 first_attempt_at DATETIME NOT NULL,
                 last_attempt_at DATETIME NOT NULL,
-                INDEX idx_ip_endpoint (ip_address, endpoint),
+                UNIQUE KEY unique_ip_endpoint (ip_address, endpoint),
                 INDEX idx_last_attempt (last_attempt_at)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         ";
@@ -52,9 +52,13 @@ class RateLimiter {
         // Clean up old records
         $this->cleanup($windowSeconds);
 
-        // Get current rate limit record
+        // Get current rate limit record. UNIX_TIMESTAMP() is timezone-agnostic
+        // (UTC epoch) so clients get correct Retry-After regardless of the
+        // MySQL server's local timezone vs. PHP's UTC default.
         $stmt = $this->pdo->prepare("
-            SELECT attempts, first_attempt_at, last_attempt_at
+            SELECT attempts,
+                   UNIX_TIMESTAMP(first_attempt_at) AS first_ts,
+                   UNIX_TIMESTAMP(last_attempt_at)  AS last_ts
             FROM {$this->table}
             WHERE ip_address = :ip
             AND endpoint = :endpoint
@@ -80,44 +84,64 @@ class RateLimiter {
         }
 
         $attempts = (int)$record['attempts'];
+        $resetTs  = (int)$record['first_ts'] + $windowSeconds;
+        $resetAt  = gmdate('Y-m-d H:i:s', $resetTs);
 
         if ($attempts >= $maxAttempts) {
-            // Rate limit exceeded
-            $resetAt = date('Y-m-d H:i:s', strtotime($record['first_attempt_at']) + $windowSeconds);
-
             return [
                 'allowed' => false,
                 'remainingAttempts' => 0,
                 'resetAt' => $resetAt,
-                'retryAfter' => max(0, strtotime($resetAt) - time())
+                'retryAfter' => max(0, $resetTs - time())
             ];
         }
 
-        // Still within limit
         return [
             'allowed' => true,
             'remainingAttempts' => $maxAttempts - $attempts - 1,
-            'resetAt' => date('Y-m-d H:i:s', strtotime($record['first_attempt_at']) + $windowSeconds)
+            'resetAt' => $resetAt
         ];
     }
 
     /**
-     * Record an attempt
+     * Record an attempt.
+     *
+     * Two-step to keep each query simple enough for MySQL server-side
+     * prepared statements:
+     *   1) Reset rows whose window has fully elapsed (attempts=1, first=NOW).
+     *   2) INSERT-or-increment via ON DUPLICATE KEY UPDATE.
+     *
+     * Without the reset step, ON DUPLICATE KEY UPDATE would keep
+     * incrementing forever and check() would still see stale attempts
+     * even after the window had passed.
      */
-    public function hit(string $endpoint): void {
+    public function hit(string $endpoint, int $windowSeconds = 300): void {
         $ipAddress = $this->getClientIp();
 
-        $stmt = $this->pdo->prepare("
+        $reset = $this->pdo->prepare("
+            UPDATE {$this->table}
+            SET attempts = 0,
+                first_attempt_at = NOW()
+            WHERE ip_address = :ip
+              AND endpoint = :endpoint
+              AND first_attempt_at < DATE_SUB(NOW(), INTERVAL :window SECOND)
+        ");
+        $reset->execute([
+            'ip' => $ipAddress,
+            'endpoint' => $endpoint,
+            'window' => $windowSeconds,
+        ]);
+
+        $upsert = $this->pdo->prepare("
             INSERT INTO {$this->table} (ip_address, endpoint, attempts, first_attempt_at, last_attempt_at)
             VALUES (:ip, :endpoint, 1, NOW(), NOW())
             ON DUPLICATE KEY UPDATE
                 attempts = attempts + 1,
                 last_attempt_at = NOW()
         ");
-
-        $stmt->execute([
+        $upsert->execute([
             'ip' => $ipAddress,
-            'endpoint' => $endpoint
+            'endpoint' => $endpoint,
         ]);
     }
 
@@ -198,6 +222,6 @@ class RateLimiter {
         }
 
         // Record this attempt
-        $this->hit($endpoint);
+        $this->hit($endpoint, $windowSeconds);
     }
 }

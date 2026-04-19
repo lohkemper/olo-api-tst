@@ -28,6 +28,8 @@ class requestPostIotRegister extends RequestBase {
         try {
             header('Content-Type: application/json; charset=utf-8');
 
+            (new RateLimiter($this->pdo))->requireLimit('iot/register', 5, 60);
+
             $validated = $this->validateInput();
             if ($validated === null) {
                 return;

@@ -37,6 +37,10 @@ class requestPostIotDataSync extends RequestBase {
             }
 
             $deviceId = (int)$device['iot_devices_id'];
+
+            (new RateLimiter($this->pdo))->requireLimit(
+                'iot/data-sync:' . $deviceId, 60, 60
+            );
             $dataPoints = $this->data['data'] ?? [];
 
             if (empty($dataPoints) || !is_array($dataPoints)) {
