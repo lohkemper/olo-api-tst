@@ -56,6 +56,7 @@ include('post-iot-register.php');
 include('post-iot-heartbeat.php');
 include('post-iot-data-sync.php');
 include('post-iot-pi-sync.php');
+include('post-iot-rotate-key.php');
 include('get-iot-devices.php');
 include('get-iot-data.php');
 include('get-iot-networks.php');
@@ -593,6 +594,20 @@ class request {
     global $_PUT;
 
     $this->normalizeIotPathId($subroute);
+
+    // POST /iot/devices/{id}/rotate-key — path parser leaves this as
+    // ['area'=>iot, 'subroute'=>devices, '<id>'=>'rotate-key'], so detect
+    // and dispatch before the generic GET /iot/devices handler below.
+    if ($subroute === 'devices' && $this->methode === 'POST') {
+        foreach ($this->request as $key => $value) {
+            if (ctype_digit((string)$key) && $value === 'rotate-key') {
+                $handler = new requestPostIotRotateKey($this->pdo, '');
+                $handler->setDeviceId((int)$key);
+                $handler->execute();
+                return true;
+            }
+        }
+    }
 
     // POST /iot/register
     if ($subroute === 'register' && $this->methode === 'POST') {
