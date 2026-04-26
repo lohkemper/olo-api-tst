@@ -63,6 +63,7 @@ include('get-iot-networks.php');
 include('post-iot-networks.php');
 include('put-iot-networks.php');
 include('delete-iot-networks.php');
+include('delete-iot-devices.php');
 
 class request {
   private array $logs = [];
@@ -644,6 +645,14 @@ class request {
     // GET /iot/devices, GET /iot/devices/{id}
     if ($subroute === 'devices' && $this->methode === 'GET') {
         $handler = new requestGetIotDevices($this->pdo, '');
+        $handler->setRequest($this->request);
+        $handler->execute();
+        return true;
+    }
+
+    // DELETE /iot/devices/{id}
+    if ($subroute === 'devices' && $this->methode === 'DELETE') {
+        $handler = new requestDeleteIotDevices($this->pdo, '');
         $handler->setRequest($this->request);
         $handler->execute();
         return true;
