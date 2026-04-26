@@ -7,6 +7,11 @@ if (!STOKEN) die('SEC');
 /**
  * GET /iot/devices          — Alle registrierten Geräte
  * GET /iot/devices/{id}     — Einzelnes Gerät mit Sensoren und Aktoren
+ *
+ * Jede Antwort enthält ein abgeleitetes Feld `device_key` — die mittleren zwei
+ * Pfadteile aus dem MQTT-Topic-Schema `pks/{projekt}/{bereich}/{messwert}`.
+ * Der Pi-Sync nutzt das Feld, um seine lokale `chip_id_map` (device_key → chip_id)
+ * zu pflegen, ohne pro Geraet manuelles SQL zu brauchen — siehe STORY-1.8.
  */
 class requestGetIotDevices extends RequestBase {
     private array $request = [];
@@ -53,7 +58,7 @@ class requestGetIotDevices extends RequestBase {
         $stmt->execute();
         $devices = $stmt->fetchAll();
 
-        // Add sensor/actor counts
+        // Add sensor/actor counts and derive device_key from a sample MQTT topic
         foreach ($devices as &$device) {
             $id = $device['iot_devices_id'];
 
@@ -64,9 +69,48 @@ class requestGetIotDevices extends RequestBase {
             $stmt = $this->pdo->prepare('SELECT COUNT(*) AS cnt FROM mbc_iot_aktoren WHERE mbc_iot_devices = ?');
             $stmt->execute([$id]);
             $device['aktor_count'] = (int)$stmt->fetch()['cnt'];
+
+            $device['device_key'] = $this->deriveDeviceKey($id);
         }
 
         echo json_encode($devices);
+    }
+
+    /**
+     * Leitet den device_key (z.B. "garten/klima") aus dem MQTT-Topic-Schema
+     * `pks/{projekt}/{bereich}/{messwert}` ab. Bevorzugt einen Sensor-Topic,
+     * fällt auf einen Aktor-Set-Topic zurück. Liefert null, wenn das Geraet
+     * weder Sensoren noch Aktoren hat (z.B. Pi-Devices).
+     */
+    private function deriveDeviceKey(int $deviceId): ?string {
+        $stmt = $this->pdo->prepare(
+            'SELECT mqtt_topic FROM mbc_iot_sensoren WHERE mbc_iot_devices = ?
+             ORDER BY iot_sensoren_id LIMIT 1'
+        );
+        $stmt->execute([$deviceId]);
+        $row = $stmt->fetch();
+        $topic = $row['mqtt_topic'] ?? null;
+
+        if (!$topic) {
+            $stmt = $this->pdo->prepare(
+                'SELECT mqtt_topic_set FROM mbc_iot_aktoren WHERE mbc_iot_devices = ?
+                 ORDER BY iot_aktoren_id LIMIT 1'
+            );
+            $stmt->execute([$deviceId]);
+            $row = $stmt->fetch();
+            $topic = $row['mqtt_topic_set'] ?? null;
+        }
+
+        if (!$topic) {
+            return null;
+        }
+
+        $parts = explode('/', trim($topic, '/'));
+        // Expect: pks/{projekt}/{bereich}/{messwert} → at least 4 parts
+        if (count($parts) < 3 || $parts[0] !== 'pks') {
+            return null;
+        }
+        return $parts[1] . '/' . $parts[2];
     }
 
     private function getDeviceById(int $deviceId): void {
@@ -114,6 +158,7 @@ class requestGetIotDevices extends RequestBase {
             $aktor['zustaende'] = json_decode($aktor['zustaende'], true);
         }
         $device['aktoren'] = $aktoren;
+        $device['device_key'] = $this->deriveDeviceKey($deviceId);
 
         echo json_encode($device);
     }
