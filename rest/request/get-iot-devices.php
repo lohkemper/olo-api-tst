@@ -39,7 +39,12 @@ class requestGetIotDevices extends RequestBase {
     private function getAllDevices(): void {
         $stmt = $this->pdo->prepare(
             'SELECT d.iot_devices_id, d.chip_id, d.name, d.typ, d.firmware_version,
-                    d.online_status, d.last_heartbeat, d.registered_at,
+                    CASE
+                      WHEN d.last_heartbeat IS NULL THEN \'unbekannt\'
+                      WHEN d.last_heartbeat > NOW() - INTERVAL 15 MINUTE THEN \'online\'
+                      ELSE \'offline\'
+                    END AS online_status,
+                    d.last_heartbeat, d.registered_at,
                     n.name AS network_name, n.pi_local_ip
              FROM mbc_iot_devices d
              LEFT JOIN mbc_iot_networks n ON d.mbc_iot_networks = n.iot_networks_id
@@ -68,7 +73,12 @@ class requestGetIotDevices extends RequestBase {
         // Fetch device
         $stmt = $this->pdo->prepare(
             'SELECT d.iot_devices_id, d.chip_id, d.name, d.typ, d.firmware_version,
-                    d.online_status, d.last_heartbeat, d.registered_at,
+                    CASE
+                      WHEN d.last_heartbeat IS NULL THEN \'unbekannt\'
+                      WHEN d.last_heartbeat > NOW() - INTERVAL 15 MINUTE THEN \'online\'
+                      ELSE \'offline\'
+                    END AS online_status,
+                    d.last_heartbeat, d.registered_at,
                     n.name AS network_name, n.pi_local_ip, n.iot_ssid, n.mqtt_port
              FROM mbc_iot_devices d
              LEFT JOIN mbc_iot_networks n ON d.mbc_iot_networks = n.iot_networks_id
