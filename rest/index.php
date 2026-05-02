@@ -32,7 +32,12 @@ $requestMethod = $_SERVER['REQUEST_METHOD'];
 
 include('cfg/cfg.php');
 include('auth/session-helper.php');
+include('auth/security-headers.php');
+include('auth/api-key-auth.php');
 include('request/request.php');
+
+// Send security headers (HSTS, X-Content-Type-Options, ...)
+SecurityHeaders::apply();
 
 // Start secure session
 SessionHelper::start();

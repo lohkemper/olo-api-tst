@@ -23,28 +23,14 @@ class requestPostIotHeartbeat extends RequestBase {
 
     public function execute(): void {
         try {
-            header('Content-Type: application/json; charset=utf-8');
-
-            // Authenticate via API key
-            $apiKey = $_SERVER['HTTP_X_API_KEY'] ?? '';
-            if (empty($apiKey)) {
-                http_response_code(401);
-                echo json_encode(['error' => 'Missing X-Api-Key header']);
+            $device = ApiKeyAuth::authenticateDevice($this->pdo);
+            if ($device === null) {
                 return;
             }
 
-            // Find device by API key
-            $stmt = $this->pdo->prepare(
-                'SELECT iot_devices_id, chip_id, name FROM mbc_iot_devices WHERE api_key = ?'
+            (new RateLimiter($this->pdo))->requireLimit(
+                'iot/heartbeat:' . (int)$device['iot_devices_id'], 60, 60
             );
-            $stmt->execute([$apiKey]);
-            $device = $stmt->fetch();
-
-            if (!$device) {
-                http_response_code(401);
-                echo json_encode(['error' => 'Invalid API key']);
-                return;
-            }
 
             // Update heartbeat
             $stmt = $this->pdo->prepare(

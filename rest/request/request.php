@@ -55,10 +55,14 @@ include('delete.php');
 include('post-iot-register.php');
 include('post-iot-heartbeat.php');
 include('post-iot-data-sync.php');
+include('post-iot-pi-sync.php');
+include('post-iot-rotate-key.php');
 include('get-iot-devices.php');
 include('get-iot-data.php');
 include('get-iot-networks.php');
 include('post-iot-networks.php');
+include('put-iot-networks.php');
+include('delete-iot-networks.php');
 
 class request {
   private array $logs = [];
@@ -591,6 +595,20 @@ class request {
 
     $this->normalizeIotPathId($subroute);
 
+    // POST /iot/devices/{id}/rotate-key — path parser leaves this as
+    // ['area'=>iot, 'subroute'=>devices, '<id>'=>'rotate-key'], so detect
+    // and dispatch before the generic GET /iot/devices handler below.
+    if ($subroute === 'devices' && $this->methode === 'POST') {
+        foreach ($this->request as $key => $value) {
+            if (ctype_digit((string)$key) && $value === 'rotate-key') {
+                $handler = new requestPostIotRotateKey($this->pdo, '');
+                $handler->setDeviceId((int)$key);
+                $handler->execute();
+                return true;
+            }
+        }
+    }
+
     // POST /iot/register
     if ($subroute === 'register' && $this->methode === 'POST') {
         $handler = new requestPostIotRegister($this->pdo, '');
@@ -610,6 +628,14 @@ class request {
     // POST /iot/data-sync
     if ($subroute === 'data-sync' && $this->methode === 'POST') {
         $handler = new requestPostIotDataSync($this->pdo, '');
+        $handler->setData($_PUT ?? []);
+        $handler->execute();
+        return true;
+    }
+
+    // POST /iot/pi-sync
+    if ($subroute === 'pi-sync' && $this->methode === 'POST') {
+        $handler = new requestPostIotPiSync($this->pdo, '');
         $handler->setData($_PUT ?? []);
         $handler->execute();
         return true;
@@ -643,6 +669,23 @@ class request {
     if ($subroute === 'networks' && $this->methode === 'POST') {
         $handler = new requestPostIotNetworks($this->pdo, '');
         $handler->setData($_PUT ?? []);
+        $handler->execute();
+        return true;
+    }
+
+    // PUT /iot/networks/{id}
+    if ($subroute === 'networks' && $this->methode === 'PUT') {
+        $handler = new requestPutIotNetworks($this->pdo, '');
+        $handler->setRequest($this->request);
+        $handler->setData($_PUT ?? []);
+        $handler->execute();
+        return true;
+    }
+
+    // DELETE /iot/networks/{id}
+    if ($subroute === 'networks' && $this->methode === 'DELETE') {
+        $handler = new requestDeleteIotNetworks($this->pdo, '');
+        $handler->setRequest($this->request);
         $handler->execute();
         return true;
     }

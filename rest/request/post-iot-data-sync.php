@@ -31,30 +31,16 @@ class requestPostIotDataSync extends RequestBase {
 
     public function execute(): void {
         try {
-            header('Content-Type: application/json; charset=utf-8');
-
-            // Authenticate via API key
-            $apiKey = $_SERVER['HTTP_X_API_KEY'] ?? '';
-            if (empty($apiKey)) {
-                http_response_code(401);
-                echo json_encode(['error' => 'Missing X-Api-Key header']);
-                return;
-            }
-
-            // Find device by API key
-            $stmt = $this->pdo->prepare(
-                'SELECT iot_devices_id FROM mbc_iot_devices WHERE api_key = ?'
-            );
-            $stmt->execute([$apiKey]);
-            $device = $stmt->fetch();
-
-            if (!$device) {
-                http_response_code(401);
-                echo json_encode(['error' => 'Invalid API key']);
+            $device = ApiKeyAuth::authenticateDevice($this->pdo);
+            if ($device === null) {
                 return;
             }
 
             $deviceId = (int)$device['iot_devices_id'];
+
+            (new RateLimiter($this->pdo))->requireLimit(
+                'iot/data-sync:' . $deviceId, 60, 60
+            );
             $dataPoints = $this->data['data'] ?? [];
 
             if (empty($dataPoints) || !is_array($dataPoints)) {
