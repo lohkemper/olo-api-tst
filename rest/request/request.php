@@ -37,6 +37,7 @@ include('get-warehouse-locations.php');
 include('get-warehouse-items.php');
 include('post-warehouse-locations.php');
 include('post-warehouse-items.php');
+include('post-warehouse-items-upload-image.php');
 include('put-warehouse-locations.php');
 include('put-warehouse-items.php');
 include('delete-warehouse-locations.php');
@@ -519,6 +520,16 @@ class request {
 
     // Handle warehouse-items routes: /warehouse-items
     if ($area === 'warehouse-items') {
+      // Subroute: POST /warehouse-items/upload-image (multipart file upload)
+      if ($this->methode === 'POST'
+        && isset($this->request['subroute'])
+        && $this->request['subroute'] === 'upload-image'
+      ) {
+        $handler = new requestPostWarehouseItemsUploadImage($this->pdo, '');
+        $handler->execute();
+        return true;
+      }
+
       if ($this->methode === 'GET') {
         $requestGetWarehouseItems = new requestGetWarehouseItems($this->pdo, '');
         $requestGetWarehouseItems->setRequest($this->request);
