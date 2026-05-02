@@ -1,0 +1,26 @@
+# Statische Datei-Auslieferung im /uploads/-Ordner.
+# Verhindert, dass Apache Requests an index.php weiterleitet,
+# und sperrt die Ausführung von Skripten in diesem Verzeichnis.
+
+# 1) URL-Rewriting hier komplett aus -> Datei direkt aus dem FS ausliefern.
+<IfModule mod_rewrite.c>
+  RewriteEngine Off
+</IfModule>
+
+# 2) Keine ausführbaren Scripte in diesem Ordner und allen Unterverzeichnissen.
+<FilesMatch "\.(?:php|phtml|php3|php4|php5|php7|phar|pl|py|cgi|sh|inc)$">
+  Require all denied
+</FilesMatch>
+
+# 3) Verzeichnis-Listing aus.
+Options -Indexes -ExecCGI
+
+# 4) Sinnvolle Cache-Header fuer hochgeladene Bilder.
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresByType image/jpeg "access plus 30 days"
+  ExpiresByType image/png  "access plus 30 days"
+  ExpiresByType image/webp "access plus 30 days"
+  ExpiresByType image/heic "access plus 30 days"
+  ExpiresByType image/gif  "access plus 30 days"
+</IfModule>
