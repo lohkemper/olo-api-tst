@@ -18,12 +18,12 @@ UPDATE `mbc_navigations`
 SET `is_active` = 1
 WHERE `navigations_id` = 13;
 
+-- mbc_schema_versions.module ist Primary Key → bei Re-Run die Version überschreiben.
 INSERT INTO `mbc_schema_versions` (`module`, `version`, `description`)
-SELECT 'navigation', '1.2.0', 'Reactivate /admin/logs after LogsViewerComponent impl'
-WHERE NOT EXISTS (
-  SELECT 1 FROM `mbc_schema_versions`
-  WHERE `module` = 'navigation' AND `version` = '1.2.0'
-);
+VALUES ('navigation', '1.2.0', 'Reactivate /admin/logs after LogsViewerComponent impl')
+ON DUPLICATE KEY UPDATE
+  `version` = VALUES(`version`),
+  `description` = VALUES(`description`);
 
 COMMIT;
 

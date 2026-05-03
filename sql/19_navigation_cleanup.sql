@@ -67,12 +67,12 @@ WHERE `navigations_id` = 37
 -- ---------------------------------------------------------------------------
 -- 5. Schema-Version dokumentieren
 -- ---------------------------------------------------------------------------
+-- mbc_schema_versions.module ist Primary Key → bei Re-Run die Version überschreiben.
 INSERT INTO `mbc_schema_versions` (`module`, `version`, `description`)
-SELECT 'navigation', '1.1.0', 'Pre-flight cleanup: typo, parent_id, is_active, sort_order'
-WHERE NOT EXISTS (
-  SELECT 1 FROM `mbc_schema_versions`
-  WHERE `module` = 'navigation' AND `version` = '1.1.0'
-);
+VALUES ('navigation', '1.1.0', 'Pre-flight cleanup: typo, parent_id, is_active, sort_order')
+ON DUPLICATE KEY UPDATE
+  `version` = VALUES(`version`),
+  `description` = VALUES(`description`);
 
 COMMIT;
 
