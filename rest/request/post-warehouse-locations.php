@@ -57,8 +57,9 @@ class requestPostWarehouseLocations extends RequestBase {
             // Insert location (triggers will calculate path and level)
             $sql = "
                 INSERT INTO " . PREFIX . "_warehouse_locations
-                (name, parent_id, type, description, meta, user_id)
-                VALUES (?, ?, ?, ?, ?, ?)
+                (name, parent_id, type, description, meta,
+                 grid_rows, grid_cols, width_cm, height_cm, depth_cm, user_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ";
 
             $stmt = $this->pdo->prepare($sql);
@@ -68,6 +69,11 @@ class requestPostWarehouseLocations extends RequestBase {
                 $this->data['type'] ?? null,
                 $this->data['description'] ?? null,
                 isset($this->data['meta']) ? json_encode($this->data['meta']) : null,
+                $this->nullableUint($this->data['grid_rows'] ?? null),
+                $this->nullableUint($this->data['grid_cols'] ?? null),
+                $this->nullableUint($this->data['width_cm']  ?? null),
+                $this->nullableUint($this->data['height_cm'] ?? null),
+                $this->nullableUint($this->data['depth_cm']  ?? null),
                 $userId
             ]);
 
@@ -91,5 +97,16 @@ class requestPostWarehouseLocations extends RequestBase {
         } catch (\Throwable $e) {
             $this->handleError('Error creating warehouse location', $e);
         }
+    }
+
+    /**
+     * Normalisiert Eingabe zu UNSIGNED INT oder NULL.
+     * Akzeptiert nur positive Ganzzahlen; alles andere wird zu NULL.
+     */
+    private function nullableUint(mixed $value): ?int {
+        if ($value === null || $value === '' || $value === false) return null;
+        if (!is_numeric($value)) return null;
+        $i = (int)$value;
+        return $i > 0 ? $i : null;
     }
 }
