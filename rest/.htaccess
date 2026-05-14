@@ -6,7 +6,7 @@
 
 <IfModule mod_headers.c>
   # Allow specific origins
-  SetEnvIf Origin "^http(s)?://(localhost:4200|localhost:4201|oliverlohkemper\.de|www\.oliverlohkemper\.de)$" AccessControlAllowOrigin=$0
+  SetEnvIf Origin "^http(s)?://(localhost:4200|oliverlohkemper\.de|www\.oliverlohkemper\.de)$" AccessControlAllowOrigin=$0
 
   # Set CORS headers if origin is allowed
   Header always set Access-Control-Allow-Origin "%{AccessControlAllowOrigin}e" env=AccessControlAllowOrigin
