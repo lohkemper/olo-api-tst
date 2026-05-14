@@ -59,12 +59,27 @@
 </IfModule>
 
 # ============================================================================
-# Security Headers (optional but recommended)
+# Security Headers — Spec docs/design/security.md
 # ============================================================================
 <IfModule mod_headers.c>
   Header always set X-Content-Type-Options "nosniff"
-  Header always set X-Frame-Options "SAMEORIGIN"
+
+  # Spec verlangt DENY (API-Responses sollten niemals in iframes landen).
+  # Wechsel von SAMEORIGIN (2026-05-14) — restriktiver, da REST-API nur JSON
+  # ausliefert und keinerlei iframe-Einbettung sinnvoll wäre.
+  Header always set X-Frame-Options "DENY"
+
   Header always set X-XSS-Protection "1; mode=block"
+
+  # Referrer-Policy — keine Referer zu Drittparteien
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+
+  # Permissions-Policy — deaktiviert sensitive Browser-APIs für die API-Domain
+  Header always set Permissions-Policy "camera=(), microphone=(), geolocation=(), interest-cohort=()"
+
+  # Content-Security-Policy für API-Responses (JSON-only, sehr restriktiv).
+  # Die App-CSP wird im App-Apache-Container gesetzt (siehe app.htaccess.example).
+  Header always set Content-Security-Policy "default-src 'none'; frame-ancestors 'none'"
 
   # HSTS - only on HTTPS responses (RFC 6797: MUST NOT send over plain HTTP)
   # expr= wird zur Response-Zeit ausgewertet und ueberlebt interne Rewrites.

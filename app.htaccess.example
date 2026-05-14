@@ -1,0 +1,87 @@
+# =============================================================================
+# MBC Angular-App — Apache .htaccess Template
+# =============================================================================
+#
+# Diese Datei wird in den App-Deploy-Pfad (`/mbc/`) gelegt, NEBEN den
+# `dist/ng-mbc-18/`-Build-Output. Wird via WinSCP nach jedem Build
+# manuell deployed — siehe docs/design/deployment-environments.md.
+#
+# Spec: docs/design/security.md (CSP, X-Frame-Options).
+#
+# Anders als die REST-API-`.htaccess` muss die App eine CSP für HTML/JS/CSS
+# erlauben — `'unsafe-inline'` für Styles + ggf. `'unsafe-eval'` für
+# Markdown-Library sind Pflicht für Angular SSR-less Builds.
+# =============================================================================
+
+# ============================================================================
+# Angular SPA Fallback — alle nicht-Datei-Pfade auf index.html
+# ============================================================================
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /mbc/
+
+  # Statische Dateien direkt ausliefern, alles andere → index.html (SPA-Routing)
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule ^(.*)$ index.html [L]
+</IfModule>
+
+# ============================================================================
+# Security Headers — Spec docs/design/security.md
+# ============================================================================
+<IfModule mod_headers.c>
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set X-Frame-Options "DENY"
+  Header always set X-XSS-Protection "1; mode=block"
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+  Header always set Permissions-Policy "camera=(), microphone=(), geolocation=(), interest-cohort=()"
+
+  # Content-Security-Policy — Angular-spezifisch
+  #
+  # - 'self'              → eigene Domain
+  # - 'unsafe-inline'     → Angular emulated Style-Encapsulation generiert
+  #                         inline-Style-Attribute zur Laufzeit (Pflicht)
+  # - 'unsafe-eval'       → nur wenn Markdown-Library (ngx-markdown) genutzt
+  #                         wird, sonst entfernen
+  # - data:               → für Base64-Bilder (Carbon-Icons-SVGs)
+  # - frame-ancestors     → Clickjacking-Schutz (kein iframe-Embed)
+  # - connect-src         → REST-API + Google-Fonts CSS
+  #
+  # Anpassen wenn weitere externe Quellen genutzt werden (z. B. CDN-Bilder).
+  Header always set Content-Security-Policy "\
+    default-src 'self'; \
+    script-src 'self' 'unsafe-inline' 'unsafe-eval'; \
+    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; \
+    font-src 'self' https://fonts.gstatic.com; \
+    img-src 'self' data: https:; \
+    connect-src 'self' https://oliverlohkemper.de; \
+    frame-ancestors 'none'; \
+    base-uri 'self'; \
+    form-action 'self'"
+
+  # HSTS - only on HTTPS
+  Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains" "expr=%{HTTPS} == 'on' || %{HTTP:X-Forwarded-Proto} == 'https'"
+</IfModule>
+
+# ============================================================================
+# Cache-Headers für Static-Assets
+# ============================================================================
+<IfModule mod_expires.c>
+  ExpiresActive On
+
+  # Hashed Assets (Angular Build) — lange Cache
+  <FilesMatch "\.[0-9a-f]{8,}\.(?:js|css|woff2?)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+
+  # index.html — niemals cachen (sonst kommt User nicht auf neuen Build)
+  <FilesMatch "^index\.html$">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+  </FilesMatch>
+
+  # Bilder
+  ExpiresByType image/jpeg "access plus 30 days"
+  ExpiresByType image/png  "access plus 30 days"
+  ExpiresByType image/svg+xml "access plus 30 days"
+  ExpiresByType image/webp "access plus 30 days"
+</IfModule>
