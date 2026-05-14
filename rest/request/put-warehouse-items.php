@@ -145,6 +145,15 @@ class requestPutWarehouseItems extends RequestBase {
             $params[] = json_encode($_PUT['meta']);
         }
 
+        // Position im Lagerplatz-Raster — nullable, array_key_exists damit
+        // explizites null (Position löschen) durchgeht.
+        foreach (['grid_row', 'grid_col'] as $col) {
+            if (array_key_exists($col, $_PUT)) {
+                $updates[] = "$col = ?";
+                $params[] = $this->nullableUint($_PUT[$col]);
+            }
+        }
+
         if (!empty($updates)) {
             $params[] = $itemId;
 
@@ -269,6 +278,17 @@ class requestPutWarehouseItems extends RequestBase {
         http_response_code(200);
         header('Content-Type: application/json');
         echo json_encode($enrichedItem);
+    }
+
+    /**
+     * Normalisiert Eingabe zu UNSIGNED INT oder NULL.
+     * Akzeptiert nur positive Ganzzahlen; leere Strings/0/non-numeric → NULL.
+     */
+    private function nullableUint(mixed $value): ?int {
+        if ($value === null || $value === '' || $value === false) return null;
+        if (!is_numeric($value)) return null;
+        $i = (int)$value;
+        return $i > 0 ? $i : null;
     }
 
     /**
