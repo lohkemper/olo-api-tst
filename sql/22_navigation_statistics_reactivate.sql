@@ -2,7 +2,7 @@
 -- MBC Navigation - Lager-Statistiken Route reaktivieren
 -- ============================================================================
 -- Erstellt: 2026-05-03
--- Quelle: docs/REFACTORING-NAVIGATION-LAYOUTS.md §3 Item #16
+-- Quelle: docs/archive/refactoring-navigation-layouts.md §3 Item #16
 --
 -- Beschreibung: id 37 (/warehouse/statistics) wieder aktivieren, nachdem die
 -- Route in projects/warehouse/.../warehouse.routes.ts implementiert wurde

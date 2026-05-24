@@ -9,8 +9,8 @@
 --
 -- Architektur-Entscheidung (2026-04-10):
 --   Variante A — Raspberry Pi spannt ein eigenes Subnetz 192.168.50.0/24 auf
---   und ist Gateway auf .1. ESPs leben in diesem isolierten IoT-Netz. Das
---   entspricht dem Dual-WiFi-Konzept aus docs/KONZEPT-REGISTRIERUNG.md.
+--   und ist Gateway auf .1. ESPs leben in diesem isolierten IoT-Netz
+--   (Dual-WiFi-Konzept: Pi-Uplink + isoliertes IoT-AP).
 --
 -- Nach Insert einmal verifizieren:
 --   SELECT * FROM mbc_iot_networks WHERE is_active = 1;

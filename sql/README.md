@@ -343,8 +343,7 @@ SET FOREIGN_KEY_CHECKS = 1;
 
 ## Weitere Ressourcen
 
-- [USAGE-AUTHORIZATION.md](../rest/USAGE-AUTHORIZATION.md) - API-Dokumentation
-- [Auth Concept](../../docs/auth-concept/auth-concept.md) - Vollständiges Konzept
+- [docs/guides/authorization.md](../../docs/guides/authorization.md) - Authorization-Guide (API & Konzept)
 - [CLAUDE.md](../../CLAUDE.md) - Projekt-Dokumentation
 
 ---

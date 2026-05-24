@@ -2,7 +2,7 @@
 -- MBC Navigation - Pre-Flight Cleanup
 -- ============================================================================
 -- Erstellt: 2026-05-03
--- Quelle: docs/REFACTORING-NAVIGATION-LAYOUTS.md §1
+-- Quelle: docs/archive/refactoring-navigation-layouts.md §1
 --
 -- Beschreibung: Reine DB-/Routing-Fixes ohne Layout-Diskussion.
 --   1. Tipfehler `warehaouse` → `warehouse` in route (id 36, 37)

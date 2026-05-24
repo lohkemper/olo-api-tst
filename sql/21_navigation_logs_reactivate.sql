@@ -2,7 +2,7 @@
 -- MBC Navigation - Logs Route reaktivieren
 -- ============================================================================
 -- Erstellt: 2026-05-03
--- Quelle: docs/REFACTORING-NAVIGATION-LAYOUTS.md §3 Item #8
+-- Quelle: docs/archive/refactoring-navigation-layouts.md §3 Item #8
 --
 -- Beschreibung: id 13 (/admin/logs) wieder aktivieren, nachdem die Route
 -- in src/app/app.routes.ts implementiert wurde (LogsViewerComponent).
