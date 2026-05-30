@@ -64,25 +64,9 @@ class requestGetUsers extends RequestBase {
         $stmt->execute();
         $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        // Load roles and permissions for each user
+        // Load roles and permissions for each user (camelCase, matched User-Interface)
         $formattedUsers = array_map(function($user) {
-            $userId = (int)$user['users_id'];
-
-            return [
-                'id' => $userId,
-                'users_id' => $userId,
-                'username' => $user['username'],
-                'email' => $user['email'],
-                'password_hash' => $user['password_hash'],
-                'first_name' => $user['first_name'] ?? '',
-                'last_name' => $user['last_name'] ?? '',
-                'is_active' => (bool)$user['is_active'],
-                'created_at' => $user['created_at'],
-                'updated_at' => $user['updated_at'],
-                'last_login' => $user['last_login'],
-                'roles' => $this->getUserRoles($userId),
-                'permissions' => $this->getUserPermissions($userId)
-            ];
+            return $this->formatUser($user);
         }, $users);
 
         http_response_code(200);
@@ -121,20 +105,34 @@ class requestGetUsers extends RequestBase {
             return;
         }
 
-        $user['id'] = (int)$user['users_id'];
-        $user['users_id'] = (int)$user['users_id'];
-        $user['is_active'] = (bool)$user['is_active'];
-        $user['first_name'] = $user['first_name'] ?? '';
-        $user['last_name'] = $user['last_name'] ?? '';
-
-        // Load roles and permissions
-        $user['roles'] = $this->getUserRoles($userId);
-        $user['permissions'] = $this->getUserPermissions($userId);
-
         // Return as array for consistent API responses (ISO 25010 - Kompatibilität)
         http_response_code(200);
         header('Content-Type: application/json');
-        echo json_encode([$user]);
+        echo json_encode([$this->formatUser($user)]);
+    }
+
+    /**
+     * User-Zeile (DB snake_case) → camelCase-Response (matched User-Interface).
+     * Verschachtelte Permissions kommen als `id` (Permission-Model migriert),
+     * verschachtelte Rollen behalten roles_id (Role-Model noch snake_case).
+     */
+    private function formatUser(array $user): array {
+        $userId = (int)$user['users_id'];
+
+        return [
+            'id'           => $userId,
+            'username'     => $user['username'],
+            'email'        => $user['email'],
+            'passwordHash' => $user['password_hash'] ?? null,
+            'firstName'    => $user['first_name'] ?? '',
+            'lastName'     => $user['last_name'] ?? '',
+            'isActive'     => (bool)$user['is_active'],
+            'createdAt'    => $user['created_at'] ?? null,
+            'updatedAt'    => $user['updated_at'] ?? null,
+            'lastLogin'    => $user['last_login'] ?? null,
+            'roles'        => $this->getUserRoles($userId),
+            'permissions'  => $this->getUserPermissions($userId),
+        ];
     }
 
     /**
@@ -190,7 +188,7 @@ class requestGetUsers extends RequestBase {
 
         return array_map(function($permission) {
             return [
-                'permissions_id' => (int)$permission['permissions_id'],
+                'id' => (int)$permission['permissions_id'],
                 'name' => $permission['name'],
                 'resource' => $permission['resource'],
                 'action' => $permission['action'],
@@ -224,7 +222,7 @@ class requestGetUsers extends RequestBase {
 
         return array_map(function($permission) {
             return [
-                'permissions_id' => (int)$permission['permissions_id'],
+                'id' => (int)$permission['permissions_id'],
                 'name' => $permission['name'],
                 'resource' => $permission['resource'],
                 'action' => $permission['action'],

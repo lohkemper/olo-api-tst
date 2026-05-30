@@ -59,7 +59,7 @@ class requestDeletePermissions extends RequestBase {
                 'success' => true,
                 'message' => 'Permission deleted successfully',
                 'deleted_permission' => [
-                    'permissions_id' => (int)$permission['permissions_id'],
+                    'id' => (int)$permission['permissions_id'],
                     'name' => $permission['name'],
                     'resource' => $permission['resource'],
                     'action' => $permission['action']

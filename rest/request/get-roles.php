@@ -135,7 +135,7 @@ class requestGetRoles extends RequestBase {
         // Format permissions
         return array_map(function($permission) {
             return [
-                'permissions_id' => (int)$permission['permissions_id'],
+                'id' => (int)$permission['permissions_id'],
                 'name' => $permission['name'],
                 'resource' => $permission['resource'],
                 'action' => $permission['action'],

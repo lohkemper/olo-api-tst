@@ -111,11 +111,11 @@ class requestPostLogin extends RequestBase {
             // Response (without accessToken in body - it's now in cookie)
             $response = [
                 'user' => [
-                    'users_id' => (int)$user['users_id'],
+                    'id' => (int)$user['users_id'],
                     'email' => $user['email'],
                     'username' => $user['username'],
-                    'first_name' => $user['first_name'] ?? null,
-                    'last_name' => $user['last_name'] ?? null,
+                    'firstName' => $user['first_name'] ?? null,
+                    'lastName' => $user['last_name'] ?? null,
                     'roles' => $user['roles'],
                     'permissions' => $user['permissions']
                 ],
@@ -180,7 +180,7 @@ class requestPostLogin extends RequestBase {
 
         return array_map(function($permission) {
             return [
-                'permissions_id' => (int)$permission['permissions_id'],
+                'id' => (int)$permission['permissions_id'],
                 'name' => $permission['name'],
                 'resource' => $permission['resource'],
                 'action' => $permission['action'],
@@ -213,7 +213,7 @@ class requestPostLogin extends RequestBase {
 
         return array_map(function($permission) {
             return [
-                'permissions_id' => (int)$permission['permissions_id'],
+                'id' => (int)$permission['permissions_id'],
                 'name' => $permission['name'],
                 'resource' => $permission['resource'],
                 'action' => $permission['action'],

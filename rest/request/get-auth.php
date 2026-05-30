@@ -66,17 +66,15 @@ class requestGetAuth extends RequestBase {
         // Format response to match API contract
         $response = [
             'user' => [
-                'users_id' => (int)$user['users_id'],
+                'id' => (int)$user['users_id'],
                 'email' => $user['email'],
                 'username' => $user['username'],
-                'first_name' => $user['first_name'] ?? '',
-                'last_name' => $user['last_name'] ?? '',
-                'bio' => '', // Not in database yet
+                'firstName' => $user['first_name'] ?? '',
+                'lastName' => $user['last_name'] ?? '',
                 'image' => '', // Not in database yet
                 'roles' => $this->formatRoles($user['roles'] ?? []),
                 'permissions' => $this->formatPermissions($user['permissions'] ?? []),
-                'is_active' => (bool)($user['is_active'] ?? true),
-                'isBanned' => false
+                'isActive' => (bool)($user['is_active'] ?? true),
             ]
         ];
 
@@ -130,7 +128,7 @@ class requestGetAuth extends RequestBase {
     private function formatPermissions(array $permissions): array {
         return array_map(function($permission) {
             return [
-                'permissions_id' => (int)$permission['permissions_id'],
+                'id' => (int)$permission['permissions_id'],
                 'name' => $permission['name'],
                 'resource' => $permission['resource'],
                 'action' => $permission['action'],
