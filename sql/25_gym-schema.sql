@@ -72,7 +72,7 @@ CREATE TABLE IF NOT EXISTS mbc_gym_exercises (
 
   -- Zuordnung
   category_id INT UNSIGNED DEFAULT NULL COMMENT 'Kategorie/Muskelgruppe',
-  equipment_article_id INT DEFAULT NULL COMMENT 'Optional: Equipment-Referenz auf mbc_warehouse_items (Phase 4, Typ matched mbc_warehouse_items.items_id signed INT)',
+  equipment_article_id INT UNSIGNED DEFAULT NULL COMMENT 'Optional: Equipment-Referenz auf mbc_warehouse_items (Phase 4, Typ matched mbc_warehouse_items.items_id INT UNSIGNED — FK in 31)',
 
   -- Klassifikation
   primary_muscle VARCHAR(40) DEFAULT NULL COMMENT 'Primär beanspruchter Muskel',

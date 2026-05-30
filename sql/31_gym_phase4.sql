@@ -14,9 +14,15 @@ SET time_zone = "+00:00";
 
 -- ============================================================================
 -- FK von mbc_gym_exercises.equipment_article_id auf mbc_warehouse_items.items_id
--- (Spalte als signed INT bewusst gewählt für FK-Kompatibilität — siehe 25_gym-schema.sql)
+-- mbc_warehouse_items.items_id ist INT UNSIGNED — die referenzierende Spalte
+-- MUSS exakt matchen, sonst MariaDB/MySQL-Fehler 1005 (errno 150). Frühere
+-- Versionen von 25_gym-schema.sql legten die Spalte fälschlich als signed INT
+-- an; das MODIFY unten repariert solche Bestands-Installs idempotent.
 -- Idempotent durch DROP IF EXISTS davor.
 -- ============================================================================
+
+ALTER TABLE mbc_gym_exercises
+  MODIFY COLUMN equipment_article_id INT UNSIGNED DEFAULT NULL;
 
 ALTER TABLE mbc_gym_exercises
   DROP FOREIGN KEY IF EXISTS fk_gym_exercise_equipment;
