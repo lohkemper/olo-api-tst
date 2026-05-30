@@ -51,6 +51,7 @@ include('postfile.php');
 include('put.php');
 include('put-articles.php');
 include('delete.php');
+include('post-log.php');
 
 // IoT Request Handlers
 include('post-iot-register.php');
@@ -372,6 +373,23 @@ class request {
       $requestGetSchema = new requestGetSchema($this->pdo, '');
       $requestGetSchema->setRequest($this->request);
       $requestGetSchema->execute();
+      return true;
+    }
+
+    // Handle log ingestion route: POST /log (WebApi-Publisher aus @olo/core/logs).
+    // Fängt zusätzlich /logs ab, damit die mbc_logs-Tabelle NICHT über das
+    // generische Tabellen-Routing öffentlich auslesbar ist (GET /logs).
+    if ($area === 'log' || $area === 'logs') {
+      if ($this->methode === 'POST') {
+        $requestPostLog = new requestPostLog($this->pdo, '');
+        global $_PUT;
+        $requestPostLog->setData($_PUT ?? []);
+        $requestPostLog->execute();
+        return true;
+      }
+      http_response_code(405);
+      header('Allow: POST');
+      echo json_encode(['error' => 'Method Not Allowed', 'message' => 'The log endpoint only accepts POST']);
       return true;
     }
 
