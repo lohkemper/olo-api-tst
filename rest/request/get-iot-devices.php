@@ -7,6 +7,10 @@ if (!STOKEN) die('SEC');
 /**
  * GET /iot/devices          — Alle registrierten Geräte
  * GET /iot/devices/{id}     — Einzelnes Gerät mit Sensoren und Aktoren
+ *
+ * Response-Format: camelCase (matched 1:1 das Frontend-Interface IotDevice
+ * aus @olo/iot — kein Frontend-Mapper mehr nötig). Datums-Felder als
+ * ISO-8601 mit Z (UTC). DB speichert UTC (siehe cfg.php).
  */
 class requestGetIotDevices extends RequestBase {
     private array $request = [];
@@ -39,72 +43,129 @@ class requestGetIotDevices extends RequestBase {
     private function getAllDevices(): void {
         $stmt = $this->pdo->prepare(
             'SELECT d.iot_devices_id, d.chip_id, d.name, d.typ, d.firmware_version,
-                    d.online_status, d.last_heartbeat, d.registered_at,
+                    d.mbc_iot_networks, d.online_status, d.last_heartbeat, d.registered_at,
                     n.name AS network_name, n.pi_local_ip
              FROM mbc_iot_devices d
              LEFT JOIN mbc_iot_networks n ON d.mbc_iot_networks = n.iot_networks_id
              ORDER BY d.name'
         );
         $stmt->execute();
-        $devices = $stmt->fetchAll();
+        $rows = $stmt->fetchAll();
 
-        // Add sensor/actor counts
-        foreach ($devices as &$device) {
-            $id = $device['iot_devices_id'];
+        $devices = [];
+        foreach ($rows as $row) {
+            $id = (int)$row['iot_devices_id'];
 
-            $stmt = $this->pdo->prepare('SELECT COUNT(*) AS cnt FROM mbc_iot_sensoren WHERE mbc_iot_devices = ?');
-            $stmt->execute([$id]);
-            $device['sensor_count'] = (int)$stmt->fetch()['cnt'];
+            $device = $this->mapDevice($row);
 
-            $stmt = $this->pdo->prepare('SELECT COUNT(*) AS cnt FROM mbc_iot_aktoren WHERE mbc_iot_devices = ?');
-            $stmt->execute([$id]);
-            $device['aktor_count'] = (int)$stmt->fetch()['cnt'];
+            $cnt = $this->pdo->prepare('SELECT COUNT(*) AS cnt FROM mbc_iot_sensoren WHERE mbc_iot_devices = ?');
+            $cnt->execute([$id]);
+            $device['sensorCount'] = (int)$cnt->fetch()['cnt'];
+
+            $cnt = $this->pdo->prepare('SELECT COUNT(*) AS cnt FROM mbc_iot_aktoren WHERE mbc_iot_devices = ?');
+            $cnt->execute([$id]);
+            $device['aktorCount'] = (int)$cnt->fetch()['cnt'];
+
+            $devices[] = $device;
         }
 
         echo json_encode($devices);
     }
 
     private function getDeviceById(int $deviceId): void {
-        // Fetch device
         $stmt = $this->pdo->prepare(
             'SELECT d.iot_devices_id, d.chip_id, d.name, d.typ, d.firmware_version,
-                    d.online_status, d.last_heartbeat, d.registered_at,
-                    n.name AS network_name, n.pi_local_ip, n.iot_ssid, n.mqtt_port
+                    d.mbc_iot_networks, d.online_status, d.last_heartbeat, d.registered_at,
+                    n.name AS network_name, n.pi_local_ip
              FROM mbc_iot_devices d
              LEFT JOIN mbc_iot_networks n ON d.mbc_iot_networks = n.iot_networks_id
              WHERE d.iot_devices_id = ?'
         );
         $stmt->execute([$deviceId]);
-        $device = $stmt->fetch();
+        $row = $stmt->fetch();
 
-        if (!$device) {
+        if (!$row) {
             http_response_code(404);
             echo json_encode(['error' => 'Device not found']);
             return;
         }
 
-        // Fetch sensors
+        $device = $this->mapDevice($row);
+
+        // Sensoren
         $stmt = $this->pdo->prepare(
             'SELECT iot_sensoren_id, sensor_key, typ, einheit, modell, intervall_sekunden, mqtt_topic
              FROM mbc_iot_sensoren WHERE mbc_iot_devices = ?'
         );
         $stmt->execute([$deviceId]);
-        $device['sensoren'] = $stmt->fetchAll();
+        $device['sensoren'] = array_map([$this, 'mapSensor'], $stmt->fetchAll());
 
-        // Fetch actors
+        // Aktoren
         $stmt = $this->pdo->prepare(
-            'SELECT iot_aktoren_id, aktor_key, typ, name, zustaende, mqtt_topic_set, mqtt_topic_status
+            'SELECT iot_aktoren_id, aktor_key, typ
              FROM mbc_iot_aktoren WHERE mbc_iot_devices = ?'
         );
         $stmt->execute([$deviceId]);
-        $aktoren = $stmt->fetchAll();
-
-        // Decode JSON zustaende
-        foreach ($aktoren as &$aktor) {
-            $aktor['zustaende'] = json_decode($aktor['zustaende'], true);
-        }
-        $device['aktoren'] = $aktoren;
+        $device['aktoren'] = array_map([$this, 'mapAktor'], $stmt->fetchAll());
 
         echo json_encode($device);
+    }
+
+    /**
+     * Device-Zeile (DB snake_case) → camelCase-Response (matched IotDevice).
+     */
+    private function mapDevice(array $row): array {
+        return [
+            'id'              => (int)$row['iot_devices_id'],
+            'chipId'          => $row['chip_id'],
+            'name'            => $row['name'],
+            'typ'             => $row['typ'],
+            'firmwareVersion' => $row['firmware_version'],
+            'networkId'       => isset($row['mbc_iot_networks']) ? (int)$row['mbc_iot_networks'] : null,
+            'networkName'     => $row['network_name'] ?? null,
+            'piLocalIp'       => $row['pi_local_ip'] ?? null,
+            'onlineStatus'    => $row['online_status'],
+            'lastHeartbeat'   => $this->toIso8601($row['last_heartbeat'] ?? null),
+            'registeredAt'    => $this->toIso8601($row['registered_at'] ?? null),
+        ];
+    }
+
+    /**
+     * Sensor-Zeile → camelCase (matched IotSensor).
+     */
+    private function mapSensor(array $r): array {
+        return [
+            'id'                => (int)$r['iot_sensoren_id'],
+            'sensorKey'         => $r['sensor_key'],
+            'typ'               => $r['typ'],
+            'einheit'           => $r['einheit'],
+            'modell'            => $r['modell'],
+            'intervallSekunden' => isset($r['intervall_sekunden']) ? (int)$r['intervall_sekunden'] : null,
+            'mqttTopic'         => $r['mqtt_topic'],
+        ];
+    }
+
+    /**
+     * Aktor-Zeile → camelCase (matched IotAktor).
+     */
+    private function mapAktor(array $r): array {
+        return [
+            'id'       => (int)$r['iot_aktoren_id'],
+            'aktorKey' => $r['aktor_key'],
+            'typ'      => $r['typ'],
+        ];
+    }
+
+    /**
+     * MySQL-DATETIME ("YYYY-MM-DD HH:MM:SS", UTC) → ISO-8601 mit Z.
+     * Null-safe. Damit fällt der Date.parse(...replace(' ','T')+'Z')-
+     * Workaround im Frontend weg.
+     */
+    private function toIso8601(?string $mysqlDateTime): ?string {
+        if ($mysqlDateTime === null || $mysqlDateTime === '') {
+            return null;
+        }
+        $ts = strtotime($mysqlDateTime);
+        return $ts !== false ? gmdate('Y-m-d\TH:i:s\Z', $ts) : null;
     }
 }
