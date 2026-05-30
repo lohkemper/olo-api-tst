@@ -116,7 +116,6 @@ class requestGetArticles extends RequestBase {
 
         return [
             'id' => $articleId,
-            'articles_id' => $articleId,
             'title' => $article['title'],
             'description' => $article['description'],
             'body' => $article['body'],
@@ -132,8 +131,8 @@ class requestGetArticles extends RequestBase {
                 'id' => $article['author_id'] !== null ? (int)$article['author_id'] : null,
                 'username' => $article['author_username'] ?? '',
                 'email' => $article['author_email'] ?? '',
-                'first_name' => $article['author_first_name'] ?? '',
-                'last_name' => $article['author_last_name'] ?? '',
+                'firstName' => $article['author_first_name'] ?? '',
+                'lastName' => $article['author_last_name'] ?? '',
                 'bio' => '',
                 'image' => '',
                 'following' => false,
