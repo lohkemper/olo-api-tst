@@ -92,10 +92,18 @@ class requestGetIotDevices extends RequestBase {
 
         $device = $this->mapDevice($row);
 
-        // Sensoren
+        // Sensoren inkl. letztem Messwert (B16): Subqueries auf die Sensordaten,
+        // jüngster Wert je sensor_key.
         $stmt = $this->pdo->prepare(
-            'SELECT iot_sensoren_id, sensor_key, typ, einheit, modell, intervall_sekunden, mqtt_topic
-             FROM mbc_iot_sensoren WHERE mbc_iot_devices = ?'
+            'SELECT s.iot_sensoren_id, s.sensor_key, s.typ, s.einheit, s.modell,
+                    s.intervall_sekunden, s.mqtt_topic,
+                    (SELECT sd.wert FROM mbc_iot_sensor_data sd
+                      WHERE sd.mbc_iot_devices = s.mbc_iot_devices AND sd.sensor_key = s.sensor_key
+                      ORDER BY sd.zeitstempel DESC LIMIT 1) AS latest_wert,
+                    (SELECT sd.zeitstempel FROM mbc_iot_sensor_data sd
+                      WHERE sd.mbc_iot_devices = s.mbc_iot_devices AND sd.sensor_key = s.sensor_key
+                      ORDER BY sd.zeitstempel DESC LIMIT 1) AS latest_zeitstempel
+             FROM mbc_iot_sensoren s WHERE s.mbc_iot_devices = ?'
         );
         $stmt->execute([$deviceId]);
         $device['sensoren'] = array_map([$this, 'mapSensor'], $stmt->fetchAll());
@@ -111,6 +119,9 @@ class requestGetIotDevices extends RequestBase {
         echo json_encode($device);
     }
 
+    /** Online nur, wenn der letzte Heartbeat innerhalb dieses Fensters liegt (Sekunden). */
+    private const ONLINE_THRESHOLD_SECONDS = 300;
+
     /**
      * Device-Zeile (DB snake_case) → camelCase-Response (matched IotDevice).
      */
@@ -124,10 +135,27 @@ class requestGetIotDevices extends RequestBase {
             'networkId'       => isset($row['mbc_iot_networks']) ? (int)$row['mbc_iot_networks'] : null,
             'networkName'     => $row['network_name'] ?? null,
             'piLocalIp'       => $row['pi_local_ip'] ?? null,
-            'onlineStatus'    => $row['online_status'],
+            'onlineStatus'    => $this->computeOnlineStatus($row['last_heartbeat'] ?? null),
             'lastHeartbeat'   => $this->toIso8601($row['last_heartbeat'] ?? null),
             'registeredAt'    => $this->toIso8601($row['registered_at'] ?? null),
         ];
+    }
+
+    /**
+     * Leitet den Online-Status aus dem Alter des letzten Heartbeats ab (B14).
+     * Die gespeicherte `online_status`-Spalte wird beim Heartbeat zwar auf
+     * 'online' gesetzt, aber nie auf 'offline' zurückgesetzt — daher würde sie
+     * dauerhaft 'online' anzeigen. Verlässlich ist allein `last_heartbeat`.
+     */
+    private function computeOnlineStatus(?string $lastHeartbeat): string {
+        if (empty($lastHeartbeat)) {
+            return 'offline';
+        }
+        $ts = strtotime($lastHeartbeat);
+        if ($ts === false) {
+            return 'offline';
+        }
+        return (time() - $ts) <= self::ONLINE_THRESHOLD_SECONDS ? 'online' : 'offline';
     }
 
     /**
@@ -142,6 +170,8 @@ class requestGetIotDevices extends RequestBase {
             'modell'            => $r['modell'],
             'intervallSekunden' => isset($r['intervall_sekunden']) ? (int)$r['intervall_sekunden'] : null,
             'mqttTopic'         => $r['mqtt_topic'],
+            'latestValue'       => isset($r['latest_wert']) && $r['latest_wert'] !== null ? (float)$r['latest_wert'] : null,
+            'latestAt'          => $this->toIso8601($r['latest_zeitstempel'] ?? null),
         ];
     }
 

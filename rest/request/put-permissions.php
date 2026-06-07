@@ -28,8 +28,8 @@ class requestPutPermissions extends RequestBase {
             $this->log(['requestPutPermissions::request', $this->request]);
             $this->log(['requestPutPermissions::data', $this->data]);
 
-            // Require permission to update permissions
-            $user = $this->requirePermission('permissions.update');
+            // Require permission to update permissions (existierende Permission: permissions.manage)
+            $user = $this->requireAnyPermission(['permissions.manage', 'admin.access']);
 
             // Get permission ID from request
             if (!isset($this->request['id'])) {

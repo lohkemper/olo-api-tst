@@ -4,14 +4,26 @@ declare(strict_types=1);
 include('base.php');
 include(__DIR__ . '/../auth/csrf-helper.php');
 include(__DIR__ . '/../auth/rate-limiter.php');
+// Google-OAuth-Helper (Grow-Kalender). Defensiv: fehlt die Datei nach Teil-Deploy,
+// werden nur die gcal-Routen inaktiv, der Rest läuft weiter.
+if (is_file(__DIR__ . '/../auth/google-oauth.php')) {
+  include __DIR__ . '/../auth/google-oauth.php';
+}
 include('get.php');
 include('get-auth.php');
 include('get-users.php');
 include('get-profiles.php');
 include('get-roles.php');
 include('get-permissions.php');
+include('post-permissions.php');
+include('put-permissions.php');
+include('delete-permissions.php');
 include('get-role-permissions.php');
+include('get-navigation-roles.php');
 include('get-navigations.php');
+// Neue Admin-CRUD-Handler (users/roles) werden LAZY in ihren Dispatch-Zweigen
+// per include_once geladen — so kann ein etwaiger Fehler nicht die ganze API
+// blockieren, sondern nur die jeweilige Route.
 include('get-articles.php');
 include('get-schema.php');
 include('get-tables.php');
@@ -113,6 +125,25 @@ include('get-gym-plan-assignments.php');
 include('post-gym-plan-assignments.php');
 include('put-gym-plan-assignments.php');
 include('delete-gym-plan-assignments.php');
+// Grow-Modul (Phasen 1/5/6/7). Defensiv geladen: fehlt eine Datei (z.B. nach
+// unvollständigem Deploy), wird sie übersprungen statt den ganzen Request mit
+// einer include-Warnung (→ "headers already sent") lahmzulegen. Nur /grow-Routen
+// sind dann betroffen.
+foreach ([
+  'get-grow-cycles', 'post-grow-cycles', 'put-grow-cycles', 'delete-grow-cycles',
+  'get-grow-plants', 'post-grow-plants', 'put-grow-plants', 'delete-grow-plants',
+  'get-grow-preparations', 'post-grow-preparations', 'put-grow-preparations', 'delete-grow-preparations',
+  'get-grow-feeding-schedule', 'post-grow-feeding-schedule', 'delete-grow-feeding-schedule',
+  'get-grow-plant-devices', 'post-grow-plant-devices', 'delete-grow-plant-devices',
+  'get-grow-harvests', 'post-grow-harvests', 'delete-grow-harvests',
+  'get-grow-settings', 'post-grow-settings',
+  'get-grow-gcal-auth-url', 'get-grow-gcal-callback', 'post-grow-gcal-disconnect', 'post-grow-gcal-sync',
+] as $growHandlerFile) {
+  $growHandlerPath = __DIR__ . '/' . $growHandlerFile . '.php';
+  if (is_file($growHandlerPath)) {
+    include $growHandlerPath;
+  }
+}
 
 class request {
   private array $logs = [];
@@ -398,12 +429,33 @@ class request {
       return $this->handleAuthRoutes();
     }
 
-    // Handle users routes: /users, /users/{id}
-    if ($area === 'users' && $this->methode === 'GET' && !isset($this->request['subroute'])) {
-      $requestGetUsers = new requestGetUsers($this->pdo, '');
-      $requestGetUsers->setRequest($this->request);
-      $requestGetUsers->execute();
-      return true;
+    // Handle users routes: /users, /users/{id} (ohne subroute; /users/{id}/roles weiter unten)
+    if ($area === 'users' && !isset($this->request['subroute'])) {
+      if ($this->methode === 'GET') {
+        $requestGetUsers = new requestGetUsers($this->pdo, '');
+        $requestGetUsers->setRequest($this->request);
+        $requestGetUsers->execute();
+        return true;
+      } elseif ($this->methode === 'POST') {
+        include_once(__DIR__ . '/post-users.php');
+        $requestPostUsers = new requestPostUsers($this->pdo, '');
+        global $_PUT; $requestPostUsers->setData($_PUT ?? []);
+        $requestPostUsers->execute();
+        return true;
+      } elseif ($this->methode === 'PUT') {
+        include_once(__DIR__ . '/put-users.php');
+        $requestPutUsers = new requestPutUsers($this->pdo, '');
+        $requestPutUsers->setRequest($this->request);
+        global $_PUT; $requestPutUsers->setData($_PUT ?? []);
+        $requestPutUsers->execute();
+        return true;
+      } elseif ($this->methode === 'DELETE') {
+        include_once(__DIR__ . '/delete-users.php');
+        $requestDeleteUsers = new requestDeleteUsers($this->pdo, '');
+        $requestDeleteUsers->setRequest($this->request);
+        $requestDeleteUsers->execute();
+        return true;
+      }
     }
 
     // Handle profiles routes: /profiles/{username}
@@ -415,18 +467,56 @@ class request {
     }
 
     // Handle roles routes: /roles, /roles/{id}
-    if ($area === 'roles' && $this->methode === 'GET') {
-      $requestGetRoles = new requestGetRoles($this->pdo, '');
-      $requestGetRoles->setRequest($this->request);
-      $requestGetRoles->execute();
-      return true;
+    if ($area === 'roles') {
+      if ($this->methode === 'GET') {
+        $requestGetRoles = new requestGetRoles($this->pdo, '');
+        $requestGetRoles->setRequest($this->request);
+        $requestGetRoles->execute();
+        return true;
+      } elseif ($this->methode === 'PUT') {
+        include_once(__DIR__ . '/put-roles.php');
+        $requestPutRoles = new requestPutRoles($this->pdo, '');
+        $requestPutRoles->setRequest($this->request);
+        global $_PUT; $requestPutRoles->setData($_PUT ?? []);
+        $requestPutRoles->execute();
+        return true;
+      }
     }
 
     // Handle permissions routes: /permissions, /permissions/{id}
-    if ($area === 'permissions' && $this->methode === 'GET') {
-      $requestGetPermissions = new requestGetPermissions($this->pdo, '');
-      $requestGetPermissions->setRequest($this->request);
-      $requestGetPermissions->execute();
+    if ($area === 'permissions') {
+      if ($this->methode === 'GET') {
+        $requestGetPermissions = new requestGetPermissions($this->pdo, '');
+        $requestGetPermissions->setRequest($this->request);
+        $requestGetPermissions->execute();
+        return true;
+      } elseif ($this->methode === 'POST') {
+        $requestPostPermissions = new requestPostPermissions($this->pdo, '');
+        $requestPostPermissions->setRequest($this->request);
+        global $_PUT; $data = $_PUT;
+        $requestPostPermissions->setData($data ?? []);
+        $requestPostPermissions->execute();
+        return true;
+      } elseif ($this->methode === 'PUT') {
+        $requestPutPermissions = new requestPutPermissions($this->pdo, '');
+        $requestPutPermissions->setRequest($this->request);
+        global $_PUT; $data = $_PUT;
+        $requestPutPermissions->setData($data ?? []);
+        $requestPutPermissions->execute();
+        return true;
+      } elseif ($this->methode === 'DELETE') {
+        $requestDeletePermissions = new requestDeletePermissions($this->pdo, '');
+        $requestDeletePermissions->setRequest($this->request);
+        $requestDeletePermissions->execute();
+        return true;
+      }
+    }
+
+    // Handle navigation-roles read: /navigation_roles?navigations_id= / ?role_id=
+    if (($area === 'navigation_roles' || $area === 'navigation-roles') && $this->methode === 'GET') {
+      $requestGetNavigationRoles = new requestGetNavigationRoles($this->pdo, '');
+      $requestGetNavigationRoles->setRequest($this->request);
+      $requestGetNavigationRoles->execute();
       return true;
     }
 
@@ -665,7 +755,234 @@ class request {
         return $this->handleGymRoutes();
     }
 
+    // Handle Grow routes: /grow/{subroute}
+    if ($area === 'grow') {
+        return $this->handleGrowRoutes();
+    }
+
     return false;
+  }
+
+  /**
+   * Handle Grow-specific routes (Phase 1).
+   *
+   * Subroutes:
+   *  - /grow/cycles               GET (list), POST (create)
+   *  - /grow/cycles/{id}          GET (detail + plants), PUT (update), DELETE
+   *  - /grow/plants               GET (list, ?cycle_id=), POST (create)
+   *  - /grow/plants/{id}          GET (detail), PUT (update), DELETE
+   */
+  private function handleGrowRoutes(): bool {
+    $subroute = $this->request['subroute'] ?? '';
+    global $_PUT;
+
+    $this->normalizeGrowPathId($subroute);
+
+    // /grow/cycles ...
+    if ($subroute === 'cycles') {
+        if ($this->methode === 'GET') {
+            $handler = new requestGetGrowCycles($this->pdo, '');
+            $handler->setRequest($this->request);
+            $handler->execute();
+            return true;
+        } elseif ($this->methode === 'POST') {
+            $handler = new requestPostGrowCycles($this->pdo, '');
+            $handler->setData($_PUT ?? []);
+            $handler->execute();
+            return true;
+        } elseif ($this->methode === 'PUT') {
+            $handler = new requestPutGrowCycles($this->pdo, '');
+            $handler->setRequest($this->request);
+            $handler->setData($_PUT ?? []);
+            $handler->execute();
+            return true;
+        } elseif ($this->methode === 'DELETE') {
+            $handler = new requestDeleteGrowCycles($this->pdo, '');
+            $handler->setRequest($this->request);
+            $handler->execute();
+            return true;
+        }
+    }
+
+    // /grow/plants ...
+    if ($subroute === 'plants') {
+        if ($this->methode === 'GET') {
+            $handler = new requestGetGrowPlants($this->pdo, '');
+            $handler->setRequest($this->request);
+            $handler->execute();
+            return true;
+        } elseif ($this->methode === 'POST') {
+            $handler = new requestPostGrowPlants($this->pdo, '');
+            $handler->setData($_PUT ?? []);
+            $handler->execute();
+            return true;
+        } elseif ($this->methode === 'PUT') {
+            $handler = new requestPutGrowPlants($this->pdo, '');
+            $handler->setRequest($this->request);
+            $handler->setData($_PUT ?? []);
+            $handler->execute();
+            return true;
+        } elseif ($this->methode === 'DELETE') {
+            $handler = new requestDeleteGrowPlants($this->pdo, '');
+            $handler->setRequest($this->request);
+            $handler->execute();
+            return true;
+        }
+    }
+
+    // /grow/preparations ...
+    if ($subroute === 'preparations') {
+        if ($this->methode === 'GET') {
+            $handler = new requestGetGrowPreparations($this->pdo, '');
+            $handler->setRequest($this->request);
+            $handler->execute();
+            return true;
+        } elseif ($this->methode === 'POST') {
+            $handler = new requestPostGrowPreparations($this->pdo, '');
+            $handler->setData($_PUT ?? []);
+            $handler->execute();
+            return true;
+        } elseif ($this->methode === 'PUT') {
+            $handler = new requestPutGrowPreparations($this->pdo, '');
+            $handler->setRequest($this->request);
+            $handler->setData($_PUT ?? []);
+            $handler->execute();
+            return true;
+        } elseif ($this->methode === 'DELETE') {
+            $handler = new requestDeleteGrowPreparations($this->pdo, '');
+            $handler->setRequest($this->request);
+            $handler->execute();
+            return true;
+        }
+    }
+
+    // /grow/feeding-schedule ...
+    if ($subroute === 'feeding-schedule') {
+        if ($this->methode === 'GET') {
+            $handler = new requestGetGrowFeedingSchedule($this->pdo, '');
+            $handler->setRequest($this->request);
+            $handler->execute();
+            return true;
+        } elseif ($this->methode === 'POST') {
+            $handler = new requestPostGrowFeedingSchedule($this->pdo, '');
+            $handler->setData($_PUT ?? []);
+            $handler->execute();
+            return true;
+        } elseif ($this->methode === 'DELETE') {
+            $handler = new requestDeleteGrowFeedingSchedule($this->pdo, '');
+            $handler->setRequest($this->request);
+            $handler->execute();
+            return true;
+        }
+    }
+
+    // /grow/settings ...
+    if ($subroute === 'settings') {
+        if ($this->methode === 'GET') {
+            $handler = new requestGetGrowSettings($this->pdo, '');
+            $handler->setRequest($this->request);
+            $handler->execute();
+            return true;
+        } elseif ($this->methode === 'POST') {
+            $handler = new requestPostGrowSettings($this->pdo, '');
+            $handler->setData($_PUT ?? []);
+            $handler->execute();
+            return true;
+        }
+    }
+
+    // /grow/gcal-auth-url  — Google-OAuth Consent-URL
+    if ($subroute === 'gcal-auth-url' && $this->methode === 'GET' && class_exists('requestGetGrowGcalAuthUrl')) {
+        $handler = new requestGetGrowGcalAuthUrl($this->pdo, '');
+        $handler->setRequest($this->request);
+        $handler->execute();
+        return true;
+    }
+
+    // /grow/gcal-callback  — OAuth-Redirect-Ziel von Google
+    if ($subroute === 'gcal-callback' && $this->methode === 'GET' && class_exists('requestGetGrowGcalCallback')) {
+        $handler = new requestGetGrowGcalCallback($this->pdo, '');
+        $handler->setRequest($this->request);
+        $handler->execute();
+        return true;
+    }
+
+    // /grow/gcal-disconnect  — Verbindung trennen
+    if ($subroute === 'gcal-disconnect' && $this->methode === 'POST' && class_exists('requestPostGrowGcalDisconnect')) {
+        $handler = new requestPostGrowGcalDisconnect($this->pdo, '');
+        $handler->setData($_PUT ?? []);
+        $handler->execute();
+        return true;
+    }
+
+    // /grow/gcal-sync  — Dünge-Termine in den Google-Kalender pushen
+    if ($subroute === 'gcal-sync' && $this->methode === 'POST' && class_exists('requestPostGrowGcalSync')) {
+        $handler = new requestPostGrowGcalSync($this->pdo, '');
+        $handler->setData($_PUT ?? []);
+        $handler->execute();
+        return true;
+    }
+
+    // /grow/harvests ...
+    if ($subroute === 'harvests') {
+        if ($this->methode === 'GET') {
+            $handler = new requestGetGrowHarvests($this->pdo, '');
+            $handler->setRequest($this->request);
+            $handler->execute();
+            return true;
+        } elseif ($this->methode === 'POST') {
+            $handler = new requestPostGrowHarvests($this->pdo, '');
+            $handler->setData($_PUT ?? []);
+            $handler->execute();
+            return true;
+        } elseif ($this->methode === 'DELETE') {
+            $handler = new requestDeleteGrowHarvests($this->pdo, '');
+            $handler->setRequest($this->request);
+            $handler->execute();
+            return true;
+        }
+    }
+
+    // /grow/plant-devices ...
+    if ($subroute === 'plant-devices') {
+        if ($this->methode === 'GET') {
+            $handler = new requestGetGrowPlantDevices($this->pdo, '');
+            $handler->setRequest($this->request);
+            $handler->execute();
+            return true;
+        } elseif ($this->methode === 'POST') {
+            $handler = new requestPostGrowPlantDevices($this->pdo, '');
+            $handler->setData($_PUT ?? []);
+            $handler->execute();
+            return true;
+        } elseif ($this->methode === 'DELETE') {
+            $handler = new requestDeleteGrowPlantDevices($this->pdo, '');
+            $handler->setRequest($this->request);
+            $handler->execute();
+            return true;
+        }
+    }
+
+    return false;
+  }
+
+  /**
+   * Wandelt eine trailing-ID (vom Path-Parser als 'groupby' abgelegt)
+   * in 'id' um — analog normalizeGymPathId. Greift nur für Grow-Subroutes
+   * mit Detail-Endpoint.
+   */
+  private function normalizeGrowPathId(string $subroute): void {
+    if (!in_array($subroute, ['cycles', 'plants', 'preparations', 'feeding-schedule', 'plant-devices', 'harvests'], true)) {
+        return;
+    }
+    if (isset($this->request['id'])) {
+        return;
+    }
+    $groupby = $this->request['groupby'] ?? null;
+    if ($groupby !== null && ctype_digit((string)$groupby)) {
+        $this->request['id'] = (int)$groupby;
+        unset($this->request['groupby']);
+    }
   }
 
   /**

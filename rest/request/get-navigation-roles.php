@@ -23,9 +23,11 @@ class requestGetNavigationRoles extends RequestBase {
             // Require authentication
             $user = $this->requireAnyPermission(['navigation.read', 'admin.access']);
 
-            // Check which filter is requested
-            if (isset($this->request['navigation_id'])) {
-                $this->handleGetByNavigationId((int)$this->request['navigation_id']);
+            // Check which filter is requested.
+            // Frontend sendet `navigations_id` (Plural); ältere Aufrufer `navigation_id`.
+            $navId = $this->request['navigations_id'] ?? $this->request['navigation_id'] ?? null;
+            if ($navId !== null) {
+                $this->handleGetByNavigationId((int)$navId);
             } elseif (isset($this->request['role_id'])) {
                 $this->handleGetByRoleId((int)$this->request['role_id']);
             } else {

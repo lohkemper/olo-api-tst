@@ -26,8 +26,8 @@ class requestDeletePermissions extends RequestBase {
             $this->log('requestDeletePermissions::execute');
             $this->log(['requestDeletePermissions::request', $this->request]);
 
-            // Require permission to delete permissions
-            $user = $this->requirePermission('permissions.delete');
+            // Require permission to delete permissions (existierende Permission: permissions.manage)
+            $user = $this->requireAnyPermission(['permissions.manage', 'admin.access']);
 
             // Get permission ID from request
             if (!isset($this->request['id'])) {
