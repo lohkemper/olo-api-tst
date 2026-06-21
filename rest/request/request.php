@@ -71,6 +71,8 @@ include('post-iot-heartbeat.php');
 include('post-iot-data-sync.php');
 include('post-iot-pi-sync.php');
 include('post-iot-rotate-key.php');
+include('post-iot-device-approve.php');
+include('post-iot-fleet-token.php');
 include('get-iot-devices.php');
 include('get-iot-data.php');
 include('get-iot-networks.php');
@@ -1376,18 +1378,36 @@ class request {
 
     $this->normalizeIotPathId($subroute);
 
-    // POST /iot/devices/{id}/rotate-key — path parser leaves this as
-    // ['area'=>iot, 'subroute'=>devices, '<id>'=>'rotate-key'], so detect
+    // POST /iot/devices/{id}/{action} — path parser leaves this as
+    // ['area'=>iot, 'subroute'=>devices, '<id>'=>'<action>'], so detect
     // and dispatch before the generic GET /iot/devices handler below.
     if ($subroute === 'devices' && $this->methode === 'POST') {
         foreach ($this->request as $key => $value) {
-            if (ctype_digit((string)$key) && $value === 'rotate-key') {
+            if (!ctype_digit((string)$key)) {
+                continue;
+            }
+            if ($value === 'rotate-key') {
                 $handler = new requestPostIotRotateKey($this->pdo, '');
                 $handler->setDeviceId((int)$key);
                 $handler->execute();
                 return true;
             }
+            if ($value === 'approve' || $value === 'revoke') {
+                $handler = new requestPostIotDeviceApprove($this->pdo, '');
+                $handler->setDeviceId((int)$key);
+                $handler->setAction((string)$value);
+                $handler->execute();
+                return true;
+            }
         }
+    }
+
+    // POST /iot/fleet-tokens
+    if ($subroute === 'fleet-tokens' && $this->methode === 'POST') {
+        $handler = new requestPostIotFleetToken($this->pdo, '');
+        $handler->setData($_PUT ?? []);
+        $handler->execute();
+        return true;
     }
 
     // POST /iot/register

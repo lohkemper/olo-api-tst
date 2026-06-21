@@ -44,7 +44,8 @@ class requestGetIotDevices extends RequestBase {
     private function getAllDevices(): void {
         $stmt = $this->pdo->prepare(
             'SELECT d.iot_devices_id, d.chip_id, d.name, d.typ, d.firmware_version,
-                    d.mbc_iot_networks, d.online_status, d.last_heartbeat, d.registered_at,
+                    d.mbc_iot_networks, d.online_status, d.provisioning_status, d.approved_at,
+                    d.last_heartbeat, d.registered_at,
                     n.name AS network_name, n.pi_local_ip
              FROM mbc_iot_devices d
              LEFT JOIN mbc_iot_networks n ON d.mbc_iot_networks = n.iot_networks_id
@@ -76,7 +77,8 @@ class requestGetIotDevices extends RequestBase {
     private function getDeviceById(int $deviceId): void {
         $stmt = $this->pdo->prepare(
             'SELECT d.iot_devices_id, d.chip_id, d.name, d.typ, d.firmware_version,
-                    d.mbc_iot_networks, d.online_status, d.last_heartbeat, d.registered_at,
+                    d.mbc_iot_networks, d.online_status, d.provisioning_status, d.approved_at,
+                    d.last_heartbeat, d.registered_at,
                     n.name AS network_name, n.pi_local_ip
              FROM mbc_iot_devices d
              LEFT JOIN mbc_iot_networks n ON d.mbc_iot_networks = n.iot_networks_id
@@ -137,6 +139,8 @@ class requestGetIotDevices extends RequestBase {
             'networkName'     => $row['network_name'] ?? null,
             'piLocalIp'       => $row['pi_local_ip'] ?? null,
             'onlineStatus'    => $this->computeOnlineStatus($row['last_heartbeat'] ?? null),
+            'provisioningStatus' => $row['provisioning_status'] ?? null,
+            'approvedAt'      => $this->toIso8601($row['approved_at'] ?? null),
             'lastHeartbeat'   => $this->toIso8601($row['last_heartbeat'] ?? null),
             'registeredAt'    => $this->toIso8601($row['registered_at'] ?? null),
         ];
