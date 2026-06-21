@@ -25,6 +25,7 @@ class requestGetIotDevices extends RequestBase {
 
     public function execute(): void {
         try {
+            $this->requireAuth();
             header('Content-Type: application/json; charset=utf-8');
 
             $deviceId = $this->request['id'] ?? null;
