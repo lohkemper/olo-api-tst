@@ -1536,6 +1536,14 @@ class request {
           $requestPostAuth->setData($data ?? []);
           $requestPostAuth->execute();
           return true;
+
+        case 'settings':
+          $requestPostAuth = new requestPostAuth($this->pdo, '');
+          $requestPostAuth->setRequest($this->request);
+          global $_PUT; $data = $_PUT;
+          $requestPostAuth->setData($data ?? []);
+          $requestPostAuth->execute();
+          return true;
       }
     }
 
