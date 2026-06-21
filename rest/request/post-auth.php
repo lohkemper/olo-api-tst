@@ -74,7 +74,7 @@ class requestPostAuth extends RequestBase {
         $response = [
             'csrfToken' => $_SESSION['csrf_token'],
             'user' => [
-                'id' => (int)$user['id'],
+                'id' => (int)($user['users_id'] ?? $user['id'] ?? 0),
                 'email' => $user['email'],
                 'username' => $user['username'],
                 'bio' => $user['bio'] ?? '',
@@ -151,7 +151,7 @@ class requestPostAuth extends RequestBase {
         ]);
 
         $payload = json_encode([
-            'userId' => $user['id'],
+            'userId' => $user['users_id'] ?? $user['id'] ?? null,
             'username' => $user['username'],
             'email' => $user['email'],
             'iat' => time(),
