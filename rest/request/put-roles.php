@@ -28,6 +28,7 @@ class requestPutRoles extends RequestBase {
             $this->log(['requestPutRoles::request', $this->request]);
             $this->log(['requestPutRoles::data', $this->data]);
 
+            CsrfHelper::requireValidToken();
             $this->requireAnyPermission(['roles.manage', 'admin.access']);
 
             if (!isset($this->request['id'])) {

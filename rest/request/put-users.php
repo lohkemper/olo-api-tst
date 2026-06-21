@@ -27,6 +27,7 @@ class requestPutUsers extends RequestBase {
             $this->log('requestPutUsers::execute');
             $this->log(['requestPutUsers::request', $this->request]);
 
+            CsrfHelper::requireValidToken();
             $this->requireAnyPermission(['users.update.any', 'admin.access']);
 
             if (!isset($this->request['id'])) {

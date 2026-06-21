@@ -29,6 +29,7 @@ class requestPutPermissions extends RequestBase {
             $this->log(['requestPutPermissions::data', $this->data]);
 
             // Require permission to update permissions (existierende Permission: permissions.manage)
+            CsrfHelper::requireValidToken();
             $user = $this->requireAnyPermission(['permissions.manage', 'admin.access']);
 
             // Get permission ID from request

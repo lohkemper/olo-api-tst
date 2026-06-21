@@ -22,6 +22,7 @@ class requestPostUsers extends RequestBase {
             $this->log('requestPostUsers::execute');
             $this->log(['requestPostUsers::data', $this->data]);
 
+            CsrfHelper::requireValidToken();
             $this->requireAnyPermission(['users.create', 'admin.access']);
 
             $errors = $this->validateInput();

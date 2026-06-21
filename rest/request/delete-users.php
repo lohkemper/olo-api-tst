@@ -23,6 +23,7 @@ class requestDeleteUsers extends RequestBase {
             $this->log('requestDeleteUsers::execute');
             $this->log(['requestDeleteUsers::request', $this->request]);
 
+            CsrfHelper::requireValidToken();
             $currentUser = $this->requireAnyPermission(['users.delete.any', 'admin.access']);
 
             if (!isset($this->request['id'])) {
