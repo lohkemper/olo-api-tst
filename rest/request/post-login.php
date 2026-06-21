@@ -44,7 +44,10 @@ class requestPostLogin extends RequestBase {
                     username,
                     password_hash,
                     first_name,
-                    last_name
+                    last_name,
+                    theme,
+                    density,
+                    accent
                 FROM " . PREFIX . "_users
                 WHERE email = :email
                 LIMIT 1
@@ -121,6 +124,13 @@ class requestPostLogin extends RequestBase {
                 ],
                 'csrfToken' => $csrfToken
             ];
+
+            // UI-Präferenzen nur mitliefern, wenn gesetzt (NULL → Client-Default).
+            foreach (['theme', 'density', 'accent'] as $pref) {
+                if (!empty($user[$pref])) {
+                    $response['user'][$pref] = $user[$pref];
+                }
+            }
 
             http_response_code(200);
             header('Content-Type: application/json');

@@ -101,7 +101,10 @@ class AuthHelper {
                 u.username,
                 u.first_name,
                 u.last_name,
-                u.is_active
+                u.is_active,
+                u.theme,
+                u.density,
+                u.accent
             FROM " . PREFIX . "_users u
             WHERE u.users_id = :userId
             LIMIT 1

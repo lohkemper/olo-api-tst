@@ -78,6 +78,13 @@ class requestGetAuth extends RequestBase {
             ]
         ];
 
+        // UI-Präferenzen nur mitliefern, wenn gesetzt (NULL → Client-Default).
+        foreach (['theme', 'density', 'accent'] as $pref) {
+            if (!empty($user[$pref])) {
+                $response['user'][$pref] = $user[$pref];
+            }
+        }
+
         http_response_code(200);
         header('Content-Type: application/json');
         echo json_encode($response);
