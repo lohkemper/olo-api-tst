@@ -31,7 +31,8 @@ class requestPostIotFleetToken extends RequestBase {
         try {
             header('Content-Type: application/json; charset=utf-8');
 
-            $this->requireAuth();
+            CsrfHelper::requireValidToken();
+            $this->requireAnyPermission(['admin.access']);
 
             $label = trim($this->data['label'] ?? '');
             if ($label === '') {

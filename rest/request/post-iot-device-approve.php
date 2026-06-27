@@ -37,7 +37,8 @@ class requestPostIotDeviceApprove extends RequestBase {
         try {
             header('Content-Type: application/json; charset=utf-8');
 
-            $this->requireAuth();
+            CsrfHelper::requireValidToken();
+            $this->requireAnyPermission(['admin.access']);
 
             if ($this->deviceId <= 0) {
                 http_response_code(400);
