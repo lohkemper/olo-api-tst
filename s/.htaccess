@@ -1,0 +1,28 @@
+# ============================================================================
+# Short-Link-Resolver  —  /s/{prefix}_{id}  →  /mbc/warehouse/{prefix}/{id}
+# ============================================================================
+# Deployment: dieser Ordner spiegelt auf  oliverlohkemper.de:/s/
+# (analog zu  public-server/rest/ → /rest2/).
+# ============================================================================
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /s/
+
+  # HTTPS erzwingen (Ionos terminiert SSL am Reverse-Proxy → X-Forwarded-Proto).
+  RewriteCond %{HTTPS} !=on
+  RewriteCond %{HTTP:X-Forwarded-Proto} !=https
+  RewriteCond %{HTTP_HOST} !^localhost [NC]
+  RewriteCond %{HTTP_HOST} !^127\.0\.0\.1
+  RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+
+  # Alles, was keine echte Datei/Verzeichnis ist, geht an index.php.
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule ^(.+)$ /s/index.php?r=$1 [QSA,L]
+</IfModule>
+
+<IfModule mod_headers.c>
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
