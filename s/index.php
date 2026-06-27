@@ -4,12 +4,12 @@ declare(strict_types=1);
 /**
  * Short-Link-Resolver für QR-Codes auf Warehouse-Entitäten.
  *
- *   /s/locations_{id}  →  302  /mbc/warehouse/items?location_id={id}
+ *   /s/locations_{id}  →  302  /mbc/warehouse?location_id={id}
  *   /s/items_{id}      →  302  /mbc/warehouse/items/{id}
  *
- * Beispiel: /s/locations_27 → /mbc/warehouse/items?location_id=27
- *           (Items-Liste, gefiltert auf genau diesen Lagerplatz — „Regal
- *            scannen, Inhalt sehen“.)
+ * Beispiel: /s/locations_27 → /mbc/warehouse?location_id=27
+ *           (vereinte Warehouse-Seite, Baum gefiltert auf genau diesen
+ *            Lagerplatz — „Regal scannen, Inhalt sehen“.)
  *
  * Die Weiterleitung ist rein strukturell — keine Datenbank nötig. Das Ziel ist
  * ein relativer, same-origin Pfad, daher kein Open-Redirect-Risiko. Unbekannte
@@ -31,10 +31,10 @@ if (
     $prefix = $matches[1];
     $id = (int) $matches[2];
 
-    // Lagerplatz-QR führt auf die Items-Liste, gefiltert auf diesen Platz.
-    // Item-QR führt direkt auf das Item-Detail.
+    // Lagerplatz-QR führt auf die vereinte Warehouse-Seite, Baum gefiltert auf
+    // diesen Platz. Item-QR führt direkt auf das Item-Detail.
     $target = $prefix === 'locations'
-        ? APP_WAREHOUSE_BASE . '/items?location_id=' . $id
+        ? APP_WAREHOUSE_BASE . '?location_id=' . $id
         : APP_WAREHOUSE_BASE . '/' . $prefix . '/' . $id;
 
     header('Location: ' . $target, true, 302);
