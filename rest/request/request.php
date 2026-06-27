@@ -301,6 +301,10 @@ class request {
     try {
       $this->setSqlTables();
 
+      // Zentrale CSRF-Durchsetzung für ALLE mutierenden Requests (vor jedem
+      // Dispatch). Schließt den breiten CSRF-Gap der spezialisierten Handler.
+      $this->enforceCsrf();
+
       // Check for specialized routes first (auth, roles, permissions)
       if ($this->handleSpecializedRoutes()) {
         return;
@@ -362,6 +366,45 @@ class request {
     if (DEBUG) {
       echo '<br>REQUEST<br><pre>' . print_r($this->logs, true) . '</pre>';
     }
+  }
+
+  /**
+   * Zentrale CSRF-Durchsetzung. Verlangt für jeden mutierenden Request
+   * (POST/POSTFILE/PUT/PATCH/DELETE) ein gültiges `X-CSRF-Token` gegen die
+   * Session — das Angular-Frontend sendet es per `csrfInterceptor` bei allen
+   * Mutationen mit. Bei Fehlen/Ungültigkeit antwortet `CsrfHelper` mit 403
+   * und beendet den Request.
+   *
+   * Exempt (kein Session-CSRF möglich/sinnvoll):
+   *  - Auth-Lifecycle: `login`/`register` (es existiert noch kein Token),
+   *    `logout`/`refresh`.
+   *  - IoT-Geräte-Ingestion: Geräte authentifizieren per `X-Api-Key` bzw.
+   *    `X-Provisioning-Token` (kein Session-Cookie). Admin-IoT-Routen
+   *    (`devices`-Approve/Rotate, `fleet-tokens`, `networks`-CRUD) sind
+   *    NICHT exempt → CSRF-pflichtig.
+   *  - Offenes Client-Logging (`log`/`logs`, auch pre-auth).
+   */
+  private function enforceCsrf(): void {
+    if (!in_array($this->methode, ['POST', 'POSTFILE', 'PUT', 'PATCH', 'DELETE'], true)) {
+      return;
+    }
+
+    $area = $this->request['area'] ?? '';
+    $subroute = $this->request['subroute'] ?? '';
+
+    $exempt = [
+      'auth' => ['login', 'register', 'logout', 'refresh'],
+      'iot'  => ['register', 'heartbeat', 'data-sync', 'pi-sync'],
+      'log'  => true,
+      'logs' => true,
+    ];
+
+    if (isset($exempt[$area])
+      && ($exempt[$area] === true || in_array($subroute, $exempt[$area], true))) {
+      return;
+    }
+
+    CsrfHelper::requireValidToken();
   }
 
   /**
