@@ -54,6 +54,16 @@ include('put-warehouse-locations.php');
 include('put-warehouse-items.php');
 include('delete-warehouse-locations.php');
 include('delete-warehouse-items.php');
+// Packliste + Verleihservice (gemeinsame Basis zuerst)
+include('warehouse-packlist-base.php');
+include('get-warehouse-packlist-templates.php');
+include('post-warehouse-packlist-templates.php');
+include('put-warehouse-packlist-templates.php');
+include('delete-warehouse-packlist-templates.php');
+include('get-warehouse-packlists.php');
+include('post-warehouse-packlists.php');
+include('put-warehouse-packlists.php');
+include('delete-warehouse-packlists.php');
 include('get-email-folders.php');
 include('get-email-messages.php');
 include('post-email-messages.php');
@@ -231,6 +241,13 @@ class request {
       }
       // Special handling for email-messages actions: /email-messages/{id}/{action}
       else if( $requestPath[0] === 'email-messages' && $i == 1 && isset($requestPath[2]) && preg_match('/^[0-9]+$/Uis', $value) && !preg_match('/^[0-9]+$/Uis', $requestPath[2]) ) {
+        $this->request['id'] = (int)$value;
+        $this->request['subroute'] = $requestPath[2];
+        break; // We've consumed all relevant path segments
+      }
+      // Special handling for warehouse-packlists actions:
+      // /warehouse-packlists/{id}/{action}  (check-out|return|status|items)
+      else if( $requestPath[0] === 'warehouse-packlists' && $i == 1 && isset($requestPath[2]) && preg_match('/^[0-9]+$/Uis', $value) && !preg_match('/^[0-9]+$/Uis', $requestPath[2]) ) {
         $this->request['id'] = (int)$value;
         $this->request['subroute'] = $requestPath[2];
         break; // We've consumed all relevant path segments
@@ -751,6 +768,61 @@ class request {
         $requestDeleteWarehouseItems = new requestDeleteWarehouseItems($this->pdo, '');
         $requestDeleteWarehouseItems->setRequest($this->request);
         $requestDeleteWarehouseItems->execute();
+        return true;
+      }
+    }
+
+    // Handle warehouse-packlist-templates routes: /warehouse-packlist-templates
+    if ($area === 'warehouse-packlist-templates') {
+      global $_PUT;
+      if ($this->methode === 'GET') {
+        $handler = new requestGetWarehousePacklistTemplates($this->pdo, '');
+        $handler->setRequest($this->request);
+        $handler->execute();
+        return true;
+      } elseif ($this->methode === 'POST') {
+        $handler = new requestPostWarehousePacklistTemplates($this->pdo, '');
+        $handler->setData($_PUT ?? []);
+        $handler->execute();
+        return true;
+      } elseif ($this->methode === 'PUT') {
+        $handler = new requestPutWarehousePacklistTemplates($this->pdo, '');
+        $handler->setRequest($this->request);
+        $handler->setData($_PUT ?? []);
+        $handler->execute();
+        return true;
+      } elseif ($this->methode === 'DELETE') {
+        $handler = new requestDeleteWarehousePacklistTemplates($this->pdo, '');
+        $handler->setRequest($this->request);
+        $handler->execute();
+        return true;
+      }
+    }
+
+    // Handle warehouse-packlists routes: /warehouse-packlists (+ /{id}/{action})
+    if ($area === 'warehouse-packlists') {
+      global $_PUT;
+      if ($this->methode === 'GET') {
+        $handler = new requestGetWarehousePacklists($this->pdo, '');
+        $handler->setRequest($this->request);
+        $handler->execute();
+        return true;
+      } elseif ($this->methode === 'POST') {
+        $handler = new requestPostWarehousePacklists($this->pdo, '');
+        $handler->setRequest($this->request);
+        $handler->setData($_PUT ?? []);
+        $handler->execute();
+        return true;
+      } elseif ($this->methode === 'PUT') {
+        $handler = new requestPutWarehousePacklists($this->pdo, '');
+        $handler->setRequest($this->request);
+        $handler->setData($_PUT ?? []);
+        $handler->execute();
+        return true;
+      } elseif ($this->methode === 'DELETE') {
+        $handler = new requestDeleteWarehousePacklists($this->pdo, '');
+        $handler->setRequest($this->request);
+        $handler->execute();
         return true;
       }
     }

@@ -5,7 +5,7 @@ error_reporting(E_ALL);
 ini_set("display_errors", 1);
 
 // === CORS FIX START ===
-$allowedOrigins = ['http://localhost:4200', 'https://oliverlohkemper.de', 'https://www.oliverlohkemper.de'];
+$allowedOrigins = ['http://localhost:4200', 'http://localhost:4202', 'https://oliverlohkemper.de', 'https://www.oliverlohkemper.de'];
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
 if (in_array($origin, $allowedOrigins)) {
     header("Access-Control-Allow-Origin: $origin");

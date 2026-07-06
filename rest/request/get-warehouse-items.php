@@ -211,6 +211,40 @@ class requestGetWarehouseItems extends RequestBase {
         $tags = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         $item['tags'] = $tags;
+
+        return $this->enrichItemWithAvailability($item);
+    }
+
+    /**
+     * Reichert das Item um reserved_quantity und available_quantity an.
+     *
+     * Reservierungs-Ledger: eine aktive Reservierung ist eine Packlisten-Position
+     * mit checked_out = 1 AND returned = 0. available = quantity - reserved.
+     * quantity (physischer Bestand) bleibt unverändert.
+     *
+     * Defensiv: fehlt die packlist_items-Tabelle (Migration 38 noch nicht
+     * eingespielt), gilt reserved = 0 und der Items-Endpoint bleibt funktionsfähig.
+     */
+    private function enrichItemWithAvailability(array $item): array {
+        $quantity = (float)($item['quantity'] ?? 0);
+        $reserved = 0.0;
+
+        try {
+            $sql = "
+                SELECT COALESCE(SUM(quantity), 0) AS reserved
+                FROM " . PREFIX . "_warehouse_packlist_items
+                WHERE item_id = ? AND checked_out = 1 AND returned = 0
+            ";
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([(int)$item['items_id']]);
+            $reserved = (float)$stmt->fetchColumn();
+        } catch (\Throwable $e) {
+            // Tabelle fehlt (Pre-Migration) → reserved bleibt 0
+            $reserved = 0.0;
+        }
+
+        $item['reserved_quantity'] = $reserved;
+        $item['available_quantity'] = $quantity - $reserved;
         return $item;
     }
 }
