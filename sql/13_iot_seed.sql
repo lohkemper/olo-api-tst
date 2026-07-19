@@ -1,3 +1,12 @@
+-- ============================================================================
+-- MBC - IoT - Seed
+-- ============================================================================
+-- IoT-Networks-Seed.
+-- Konsolidiert aus den urspruenglichen Einzel-Migrationen (Reihenfolge erhalten).
+-- ============================================================================
+
+
+-- >>> aus: 002-iot-networks-seed.sql ------------------------------------------------------------
 -- SPDX-License-Identifier: LicenseRef-OliverLohkemper-Proprietary
 
 -- ============================================================================
@@ -20,3 +29,4 @@ INSERT INTO `mbc_iot_networks`
     (`name`, `iot_ssid`, `iot_password`, `pi_local_ip`, `mqtt_port`, `is_active`)
 VALUES
     ('PKS Hauptnetz', 'PKS-IoT', '9n7KDG7LbA5ENkRzr5cRO4Lnm7OeOpM0', '192.168.50.1', 1883, 1);
+

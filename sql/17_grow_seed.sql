@@ -1,4 +1,13 @@
 -- ============================================================================
+-- MBC - Grow - Seed
+-- ============================================================================
+-- Grow-Permissions + Nav-Subpages.
+-- Konsolidiert aus den urspruenglichen Einzel-Migrationen (Reihenfolge erhalten).
+-- ============================================================================
+
+
+-- >>> aus: 34_seed_grow_permissions.sql ------------------------------------------------------------
+-- ============================================================================
 -- 34_seed_grow_permissions.sql
 -- MBC Grow Module - Permissions & Navigation Seed
 -- ----------------------------------------------------------------------------
@@ -103,3 +112,85 @@ ON DUPLICATE KEY UPDATE
   version = '0.1.0',
   applied_at = CURRENT_TIMESTAMP,
   description = 'Berechtigungen und Navigation für Grow-Modul (Phase 1)';
+
+
+-- >>> aus: 41_grow_nav_subpages.sql ------------------------------------------------------------
+-- ============================================================================
+-- 41_grow_nav_subpages.sql
+-- Grow — Mega-Menü-Kinder unter dem „Grow"-Parent
+-- ============================================================================
+-- Legt die drei Grow-Unterseiten als Kinder des bestehenden Grow-Parents an
+-- (Durchläufe / Präparate / Kalender), jeweils mit Mega-Sub-Text (description).
+--
+-- Voraussetzung: 34_seed_grow_permissions.sql (Grow-Parent /grow, parent_id NULL)
+--                + 24_navigation_description.sql (description-Spalte).
+-- Idempotent: Existenz-Check je route via derived-table-NOT-EXISTS (kein 1093).
+-- ============================================================================
+
+START TRANSACTION;
+
+SET @grow_parent := (
+  SELECT `navigations_id` FROM `mbc_navigations`
+  WHERE `route` = '/grow' AND `parent_id` IS NULL
+  ORDER BY `navigations_id` LIMIT 1
+);
+
+-- 1) Durchläufe → /grow
+INSERT INTO `mbc_navigations` (`parent_id`, `title`, `route`, `description`, `icon`, `sort_order`, `is_active`)
+SELECT * FROM (
+  SELECT @grow_parent AS parent_id, 'Durchläufe' AS title, '/grow' AS route,
+         'Aufzucht-Durchläufe von Aussaat bis Ernte' AS description,
+         'plant' AS icon, 1 AS sort_order, 1 AS is_active
+) v
+WHERE @grow_parent IS NOT NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM (SELECT `parent_id`, `route` FROM `mbc_navigations`) m
+    WHERE m.parent_id = @grow_parent AND m.route = '/grow'
+  );
+
+-- 2) Präparate → /grow/preparations
+INSERT INTO `mbc_navigations` (`parent_id`, `title`, `route`, `description`, `icon`, `sort_order`, `is_active`)
+SELECT * FROM (
+  SELECT @grow_parent AS parent_id, 'Präparate' AS title, '/grow/preparations' AS route,
+         'Düngepräparat-Katalog je Phase' AS description,
+         'chemistry' AS icon, 2 AS sort_order, 1 AS is_active
+) v
+WHERE @grow_parent IS NOT NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM (SELECT `parent_id`, `route` FROM `mbc_navigations`) m
+    WHERE m.parent_id = @grow_parent AND m.route = '/grow/preparations'
+  );
+
+-- 3) Kalender → /grow/calendar
+INSERT INTO `mbc_navigations` (`parent_id`, `title`, `route`, `description`, `icon`, `sort_order`, `is_active`)
+SELECT * FROM (
+  SELECT @grow_parent AS parent_id, 'Kalender' AS title, '/grow/calendar' AS route,
+         'Feeding-Events in den Google-Kalender pushen' AS description,
+         'calendar' AS icon, 3 AS sort_order, 1 AS is_active
+) v
+WHERE @grow_parent IS NOT NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM (SELECT `parent_id`, `route` FROM `mbc_navigations`) m
+    WHERE m.parent_id = @grow_parent AND m.route = '/grow/calendar'
+  );
+
+-- Rollen-Sichtbarkeit für alle Grow-Nav-Einträge (Parent + Kinder) sicherstellen.
+INSERT IGNORE INTO `mbc_navigation_roles` (`navigations_id`, `role_id`)
+SELECT n.`navigations_id`, r.`roles_id`
+FROM `mbc_navigations` n, `mbc_roles` r
+WHERE n.`route` LIKE '/grow%'
+  AND r.`name` IN ('user', 'moderator', 'admin', 'super_admin');
+
+-- Schema-Version dokumentieren.
+INSERT INTO `mbc_schema_versions` (`module`, `version`, `description`)
+VALUES ('navigation', '1.5.0', 'Grow mega-menu children (Durchläufe/Präparate/Kalender)')
+ON DUPLICATE KEY UPDATE
+  `version` = VALUES(`version`),
+  `description` = VALUES(`description`);
+
+COMMIT;
+
+-- Verifizierung:
+--   SELECT navigations_id, parent_id, title, route, description, sort_order
+--   FROM mbc_navigations WHERE route LIKE '/grow%' ORDER BY parent_id, sort_order;
+

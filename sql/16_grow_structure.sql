@@ -1,3 +1,12 @@
+-- ============================================================================
+-- MBC - Grow - Struktur
+-- ============================================================================
+-- Grow-Schema + Preparation-Fields.
+-- Konsolidiert aus den urspruenglichen Einzel-Migrationen (Reihenfolge erhalten).
+-- ============================================================================
+
+
+-- >>> aus: 33_grow-schema.sql ------------------------------------------------------------
 -- =====================================================================
 -- 33_grow-schema.sql
 -- Modul "Grow" — Pflanzen-Aufzucht von Aussaat bis Ernte
@@ -237,3 +246,49 @@ CREATE TABLE IF NOT EXISTS `mbc_user_settings` (
     ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   COMMENT='Pro-User-Einstellungen inkl. Google-Kalender-OAuth';
+
+
+-- >>> aus: 40_grow_preparation_fields.sql ------------------------------------------------------------
+-- =====================================================================
+-- 40_grow_preparation_fields.sql
+-- Grow — Präparate-Katalog um Handoff-Felder erweitern
+--
+-- Ergänzt mbc_grow_preparations um: status, color, default_dosage, phase,
+-- ec_contribution, brand, notes. Ermöglicht die hi-fi „Präparate"-Seite
+-- (Master/Detail) aus dem Design-Handoff.
+--
+-- Voraussetzung: 33_grow-schema.sql.
+-- Idempotent: ADD COLUMN IF NOT EXISTS (MariaDB 10.0+).
+-- =====================================================================
+
+START TRANSACTION;
+
+ALTER TABLE `mbc_grow_preparations`
+  ADD COLUMN IF NOT EXISTS `status` ENUM('active','inactive') NOT NULL DEFAULT 'active'
+    COMMENT 'Aktiv-Status' AFTER `type`,
+  ADD COLUMN IF NOT EXISTS `color` VARCHAR(9) DEFAULT NULL
+    COMMENT 'Farb-Datum (Dot/Tile)' AFTER `status`,
+  ADD COLUMN IF NOT EXISTS `default_dosage` DECIMAL(10,3) NOT NULL DEFAULT 0
+    COMMENT 'Standard-Dosierung' AFTER `default_unit`,
+  ADD COLUMN IF NOT EXISTS `phase` VARCHAR(20) NOT NULL DEFAULT 'any'
+    COMMENT 'PlantPhase oder any' AFTER `default_dosage`,
+  ADD COLUMN IF NOT EXISTS `ec_contribution` DECIMAL(6,2) NOT NULL DEFAULT 0
+    COMMENT 'EC-Beitrag mS/cm' AFTER `phase`,
+  ADD COLUMN IF NOT EXISTS `brand` VARCHAR(255) DEFAULT NULL
+    COMMENT 'Hersteller/Marke' AFTER `ec_contribution`,
+  ADD COLUMN IF NOT EXISTS `notes` TEXT DEFAULT NULL
+    COMMENT 'Anwendungs-/Dosierhinweise' AFTER `brand`;
+
+-- Schema-Version dokumentieren.
+INSERT INTO `mbc_schema_versions` (`module`, `version`, `description`)
+VALUES ('grow', '0.2.0', 'Preparation catalogue fields (status/color/dosage/phase/ec/brand/notes)')
+ON DUPLICATE KEY UPDATE
+  `version` = VALUES(`version`),
+  `applied_at` = CURRENT_TIMESTAMP,
+  `description` = VALUES(`description`);
+
+COMMIT;
+
+-- Verifizierung:
+--   SHOW COLUMNS FROM mbc_grow_preparations;
+

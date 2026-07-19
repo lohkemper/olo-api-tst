@@ -1,3 +1,12 @@
+-- ============================================================================
+-- MBC - Core / Auth - Seed
+-- ============================================================================
+-- Standard-Rollen + Basis-Permissions + Rollen-Zuordnungen.
+-- Konsolidiert aus den urspruenglichen Einzel-Migrationen (Reihenfolge erhalten).
+-- ============================================================================
+
+
+-- >>> aus: 06_seed_roles_and_permissions.sql ------------------------------------------------------------
 -- ======================================================================
 -- Seed-Daten: Rollen und Permissions
 -- Beschreibung: Fügt Standard-Rollen und Permissions in das System ein
@@ -180,3 +189,4 @@ WHERE r.name = 'super_admin';
 --   SELECT 1 FROM `mbc_user_roles` ur
 --   WHERE ur.user_id = u.id
 -- );
+

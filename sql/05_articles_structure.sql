@@ -1,3 +1,12 @@
+-- ============================================================================
+-- MBC - Articles - Struktur
+-- ============================================================================
+-- Artikel-Tabelle(n).
+-- Konsolidiert aus den urspruenglichen Einzel-Migrationen (Reihenfolge erhalten).
+-- ============================================================================
+
+
+-- >>> aus: 12_create_articles_table.sql ------------------------------------------------------------
 -- phpMyAdmin SQL Dump
 -- version 4.9.11
 -- https://www.phpmyadmin.net/
@@ -152,3 +161,4 @@ ALTER TABLE `mbc_article_favorites`
   ADD CONSTRAINT `fk_article_favorites_article` FOREIGN KEY (`articles_id`) REFERENCES `mbc_articles` (`articles_id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 COMMIT;
+

@@ -1,10 +1,46 @@
-# SQL Setup for Authorization System
+# MBC — SQL-Setup (Struktur + Seed pro Modul)
 
-Diese SQL-Dateien erstellen die notwendigen Datenbank-Tabellen für das RBAC/PBAC Authorization-System.
+Diese SQL-Dateien bauen das komplette MBC-Datenbankschema auf. Die frühere
+Migrations-Historie (47 durchnummerierte Einzeldateien) wurde **pro Modul zu je
+einer Struktur- und einer Seed-Datei konsolidiert** (Statement-Reihenfolge und
+-Inhalt bleiben erhalten; die Herkunft steht jeweils als `-- >>> aus: …`-Marker
+im Datei-Inneren).
 
-## Übersicht
+## Dateiübersicht (17 Dateien)
 
-Das Authorization-System besteht aus 5 Haupttabellen und 1 Seed-Datei:
+Ausführungsreihenfolge = Dateinummer. **Struktur** (`CREATE`/`ALTER`/Trigger)
+und **Seed** (`INSERT`/Daten) sind pro Modul getrennt.
+
+| Datei                              | Inhalt                                                        |
+|------------------------------------|---------------------------------------------------------------|
+| `01_core_structure.sql`            | Users, Roles, Permissions, Zuordnungstabellen, ID-Rename, UI-Settings |
+| `02_core_seed.sql`                 | Standard-Rollen + Basis-Permissions + Rollen-Zuordnungen      |
+| `03_navigation_structure.sql`      | Navigations-Tabelle + Navigation-Roles + `description`-Spalte |
+| `04_navigation_seed.sql`           | Nav-Roles/-Permissions-Links, Cleanup/Reaktivierung, Mega-Menü-Texte |
+| `05_articles_structure.sql`        | Artikel-Tabelle(n)                                            |
+| `06_articles_seed.sql`             | Article-Permissions                                          |
+| `07_logs_structure.sql`            | Logs-Tabelle (kein Seed)                                     |
+| `08_warehouse_structure.sql`       | Locations/Items/Tags, Trigger/Views, Maße/Grid, Packlisten-Tabellen |
+| `09_warehouse_seed.sql`            | Warehouse-Permissions/Nav, Item-Seed, Packlisten-Seed, Nav-Konsolidierung |
+| `10_email_structure.sql`           | Folders/Messages/Attachments/Tags + Views                   |
+| `11_email_seed.sql`                | Email-Permissions                                           |
+| `12_iot_structure.sql`             | IoT-Tabellen, Sensor-Unique, API-Key-Hash, Rate-Limit, Provisioning |
+| `13_iot_seed.sql`                  | IoT-Networks-Seed                                           |
+| `14_gym_structure.sql`             | Exercise-Catalog, Workouts, Plans/Records, Body, Cardio/Nutrition, Phase-4 |
+| `15_gym_seed.sql`                  | Exercise-/Foods-Katalog + Permissions/Nav aller Gym-Phasen  |
+| `16_grow_structure.sql`            | Grow-Schema + Preparation-Fields                            |
+| `17_grow_seed.sql`                 | Grow-Permissions + Nav-Subpages                             |
+
+**Konvention:** Erst alle Struktur- **und** Seed-Dateien in Nummern-Reihenfolge
+ausführen. Alles ist idempotent (`IF NOT EXISTS`, `INSERT IGNORE`,
+`ON DUPLICATE KEY UPDATE`), also gefahrlos wiederholbar. Cross-Modul-Nav-Backfills
+(z.B. Mega-Menü-Beschreibungen in `04`) setzen voraus, dass die referenzierten
+Basis-Nav-Einträge im Live-Bestand existieren — auf einer frischen DB no-op'en sie
+gefahrlos.
+
+## Authorization-System (Referenz)
+
+Das RBAC/PBAC-System (`01`/`02`) besteht aus 5 Haupttabellen und 1 Seed:
 
 1. **mbc_roles** - Rollen (user, moderator, admin, etc.)
 2. **mbc_permissions** - Berechtigungen (articles.create, users.update.any, etc.)
@@ -20,43 +56,26 @@ Das Authorization-System besteht aus 5 Haupttabellen und 1 Seed-Datei:
 - Bestehende `mbc_users` Tabelle (wird durch Foreign Keys referenziert)
 - Datenbank mit Präfix "mbc" (konfigurierbar)
 
-### Schritt 1: Tabellen erstellen
-
-Führe die SQL-Dateien in **dieser Reihenfolge** aus:
+### Alle Dateien in Reihenfolge ausführen
 
 ```bash
-# Methode 1: Via mysql CLI
-mysql -u username -p database_name < 01_create_roles_table.sql
-mysql -u username -p database_name < 02_create_permissions_table.sql
-mysql -u username -p database_name < 03_create_user_roles_table.sql
-mysql -u username -p database_name < 04_create_role_permissions_table.sql
-mysql -u username -p database_name < 05_create_user_permissions_table.sql
+# Alle 17 Dateien in Nummern-Reihenfolge (Struktur + Seed) einspielen:
+for f in $(ls [0-9]*_*.sql | sort); do
+  echo ">> $f"
+  mysql -u username -p database_name < "$f"
+done
 ```
 
-**Oder alle auf einmal:**
+**Oder einzeln / via MySQL Workbench / phpMyAdmin:** Inhalt jeder Datei in
+Nummern-Reihenfolge nacheinander ausführen (siehe Dateiübersicht oben).
 
-```bash
-cat 01_create_roles_table.sql \
-    02_create_permissions_table.sql \
-    03_create_user_roles_table.sql \
-    04_create_role_permissions_table.sql \
-    05_create_user_permissions_table.sql \
-    | mysql -u username -p database_name
-```
-
-**Oder via MySQL Workbench / phpMyAdmin:**
-- Kopiere den Inhalt jeder Datei und führe sie nacheinander aus
-
-### Schritt 2: Seed-Daten einfügen
-
-```bash
-mysql -u username -p database_name < 06_seed_roles_and_permissions.sql
-```
-
-Dies erstellt:
+Das Core-Seed (`02_core_seed.sql`) erstellt u.a.:
 - 5 Standard-Rollen (guest, user, moderator, admin, super_admin)
 - 35+ Standard-Permissions für Articles, Users, Comments, Admin
 - Zuweisungen von Permissions zu Rollen
+
+> **Hinweis:** Modul-Permissions/Nav-Einträge (Warehouse, Email, Gym, Grow …)
+> liegen im jeweiligen `*_seed.sql` des Moduls, nicht im Core-Seed.
 
 ### Schritt 3: Test-Daten (Optional)
 

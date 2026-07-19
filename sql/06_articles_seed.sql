@@ -1,3 +1,12 @@
+-- ============================================================================
+-- MBC - Articles - Seed
+-- ============================================================================
+-- Article-Permissions.
+-- Konsolidiert aus den urspruenglichen Einzel-Migrationen (Reihenfolge erhalten).
+-- ============================================================================
+
+
+-- >>> aus: 13_seed_article_permissions.sql ------------------------------------------------------------
 -- Seed Article Permissions
 -- Adds article-specific permissions to the system
 
@@ -52,3 +61,4 @@ WHERE r.name IN ('admin', 'super_admin')
 AND p.resource = 'articles';
 
 COMMIT;
+

@@ -1,3 +1,12 @@
+-- ============================================================================
+-- MBC - Logs - Struktur
+-- ============================================================================
+-- Logs-Tabelle (kein Seed).
+-- Konsolidiert aus den urspruenglichen Einzel-Migrationen (Reihenfolge erhalten).
+-- ============================================================================
+
+
+-- >>> aus: 32_create_logs_table.sql ------------------------------------------------------------
 -- ======================================================================
 -- Tabelle: mbc_logs
 -- Beschreibung: Persistiert Frontend-Logs des WebApi-Publishers aus
@@ -25,3 +34,4 @@ CREATE TABLE IF NOT EXISTS `mbc_logs` (
     ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 COMMENT='Persistierte Frontend-Logs (WebApi-Publisher) + Audit-Trail';
+
