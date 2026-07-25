@@ -132,6 +132,7 @@ class requestGetIotDevices extends RequestBase {
         return [
             'id'              => (int)$row['iot_devices_id'],
             'chipId'          => $row['chip_id'],
+            'deviceKey'       => $this->deriveDeviceKey((int)$row['iot_devices_id']),
             'name'            => $row['name'],
             'typ'             => $row['typ'],
             'firmwareVersion' => $row['firmware_version'],
@@ -144,6 +145,52 @@ class requestGetIotDevices extends RequestBase {
             'lastHeartbeat'   => $this->toIso8601($row['last_heartbeat'] ?? null),
             'registeredAt'    => $this->toIso8601($row['registered_at'] ?? null),
         ];
+    }
+
+    /**
+     * Leitet den `deviceKey` (z.B. "garten/klima") aus dem MQTT-Topic-Schema
+     * `pks/{projekt}/{bereich}/{messwert}` ab — die mittleren zwei Pfadteile
+     * eines beliebigen Sensor- oder Aktor-Topics des Geräts.
+     *
+     * Der Pi-Sync pflegt damit seine lokale `chip_id_map` (device_key → chip_id),
+     * ohne dass pro Gerät manuelles SQL nötig wird (STORY-1.8). Fehlt das Feld,
+     * fällt der Pi auf eine Heuristik zurück, die den letzten Pfadteil als
+     * chip_id nimmt — der Server lehnt die Messwerte dann als „Unknown chip_id"
+     * ab, wie am 2026-04-26 über 70 Minuten geschehen.
+     *
+     * Geräte ohne Sensoren und Aktoren (z.B. der Pi selbst) liefern null.
+     *
+     * Wiederhergestellt aus dem nie gemergten Commit 1b2d7b9 (STORY-1.11).
+     */
+    private function deriveDeviceKey(int $deviceId): ?string {
+        $stmt = $this->pdo->prepare(
+            'SELECT mqtt_topic FROM mbc_iot_sensoren WHERE mbc_iot_devices = ?
+             ORDER BY iot_sensoren_id LIMIT 1'
+        );
+        $stmt->execute([$deviceId]);
+        $row = $stmt->fetch();
+        $topic = $row['mqtt_topic'] ?? null;
+
+        if (!$topic) {
+            $stmt = $this->pdo->prepare(
+                'SELECT mqtt_topic_set FROM mbc_iot_aktoren WHERE mbc_iot_devices = ?
+                 ORDER BY iot_aktoren_id LIMIT 1'
+            );
+            $stmt->execute([$deviceId]);
+            $row = $stmt->fetch();
+            $topic = $row['mqtt_topic_set'] ?? null;
+        }
+
+        if (!$topic) {
+            return null;
+        }
+
+        $parts = explode('/', trim($topic, '/'));
+        // Erwartet: pks/{projekt}/{bereich}/{messwert}
+        if (count($parts) < 3 || $parts[0] !== 'pks') {
+            return null;
+        }
+        return $parts[1] . '/' . $parts[2];
     }
 
     /**
