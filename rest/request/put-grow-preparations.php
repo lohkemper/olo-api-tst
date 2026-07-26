@@ -36,7 +36,11 @@ class requestPutGrowPreparations extends RequestBase {
             }
 
             $allowedTypes = ['base', 'grow', 'bloom', 'additive', 'booster', 'flush'];
-            $allowed = ['name', 'type', 'default_unit', 'warehouse_item_id', 'meta'];
+            $allowedPhases = ['any', 'germination', 'seedling', 'vegetative', 'flowering', 'harvest', 'cure'];
+            $allowed = [
+                'name', 'type', 'status', 'color', 'default_unit', 'default_dosage',
+                'phase', 'ec_contribution', 'brand', 'notes', 'warehouse_item_id', 'meta',
+            ];
             $sets = [];
             $params = [];
 
@@ -47,6 +51,18 @@ class requestPutGrowPreparations extends RequestBase {
                     http_response_code(400);
                     echo json_encode(['error' => 'Invalid type']);
                     return;
+                }
+                if ($f === 'status') {
+                    $value = ((string)$value) === 'inactive' ? 'inactive' : 'active';
+                }
+                if ($f === 'phase' && !in_array((string)$value, $allowedPhases, true)) {
+                    $value = 'any';
+                }
+                if ($f === 'default_dosage' || $f === 'ec_contribution') {
+                    $value = is_numeric($value) ? (float)$value : 0;
+                }
+                if ($f === 'color' || $f === 'brand' || $f === 'notes') {
+                    $value = ($value === null || $value === '') ? null : (string)$value;
                 }
                 if ($f === 'warehouse_item_id') {
                     $value = ($value === null || $value === '' || !is_numeric($value) || (int)$value <= 0) ? null : (int)$value;
@@ -72,7 +88,9 @@ class requestPutGrowPreparations extends RequestBase {
             $stmt->execute($params);
 
             $stmt = $this->pdo->prepare(
-                'SELECT grow_preparations_id, user_id, name, type, default_unit, warehouse_item_id, meta, created_at, updated_at
+                'SELECT grow_preparations_id, user_id, name, type, status, color, default_unit,
+                        default_dosage, phase, ec_contribution, brand, notes, warehouse_item_id,
+                        meta, created_at, updated_at
                  FROM mbc_grow_preparations WHERE grow_preparations_id = ?'
             );
             $stmt->execute([$id]);

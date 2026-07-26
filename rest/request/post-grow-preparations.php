@@ -48,22 +48,36 @@ class requestPostGrowPreparations extends RequestBase {
                 }
             }
 
+            $status = ((string)($this->data['status'] ?? 'active')) === 'inactive' ? 'inactive' : 'active';
+            $phase = $this->validPhase($this->data['phase'] ?? 'any');
+
             $stmt = $this->pdo->prepare(
-                'INSERT INTO mbc_grow_preparations (user_id, name, type, default_unit, warehouse_item_id, meta)
-                 VALUES (?, ?, ?, ?, ?, ?)'
+                'INSERT INTO mbc_grow_preparations
+                    (user_id, name, type, status, color, default_unit, default_dosage, phase,
+                     ec_contribution, brand, notes, warehouse_item_id, meta)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
             );
             $stmt->execute([
                 $userId,
                 $name,
                 $type,
+                $status,
+                $this->nullableStr($this->data['color'] ?? null),
                 (string)($this->data['default_unit'] ?? 'ml/L'),
+                (float)($this->data['default_dosage'] ?? 0),
+                $phase,
+                (float)($this->data['ec_contribution'] ?? 0),
+                $this->nullableStr($this->data['brand'] ?? null),
+                $this->nullableStr($this->data['notes'] ?? null),
                 $warehouseItemId,
                 isset($this->data['meta']) ? json_encode($this->data['meta']) : null,
             ]);
 
             $newId = (int)$this->pdo->lastInsertId();
             $stmt = $this->pdo->prepare(
-                'SELECT grow_preparations_id, user_id, name, type, default_unit, warehouse_item_id, meta, created_at, updated_at
+                'SELECT grow_preparations_id, user_id, name, type, status, color, default_unit,
+                        default_dosage, phase, ec_contribution, brand, notes, warehouse_item_id,
+                        meta, created_at, updated_at
                  FROM mbc_grow_preparations WHERE grow_preparations_id = ?'
             );
             $stmt->execute([$newId]);
@@ -80,5 +94,18 @@ class requestPostGrowPreparations extends RequestBase {
         if (!is_numeric($value)) return null;
         $i = (int)$value;
         return $i > 0 ? $i : null;
+    }
+
+    private function nullableStr(mixed $value): ?string {
+        if ($value === null) return null;
+        $s = trim((string)$value);
+        return $s === '' ? null : $s;
+    }
+
+    /** Erlaubt eine PlantPhase oder 'any'; Fallback 'any'. */
+    private function validPhase(mixed $value): string {
+        $allowed = ['any', 'germination', 'seedling', 'vegetative', 'flowering', 'harvest', 'cure'];
+        $v = (string)$value;
+        return in_array($v, $allowed, true) ? $v : 'any';
     }
 }

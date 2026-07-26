@@ -40,6 +40,7 @@ include('post-user-permissions.php');
 include('post-navigation-roles.php');
 include('post-role-permissions.php');
 include('post-articles.php');
+include('post-article-favorite.php');
 include('delete-navigation-roles.php');
 include('delete-role-permissions.php');
 include('delete-user-permissions.php');
@@ -84,6 +85,8 @@ include('post-iot-rotate-key.php');
 include('post-iot-device-approve.php');
 include('post-iot-fleet-token.php');
 include('get-iot-devices.php');
+include('get-iot-device-keys.php');
+include('delete-iot-devices.php');
 include('get-iot-data.php');
 include('get-iot-networks.php');
 include('post-iot-networks.php');
@@ -146,6 +149,7 @@ foreach ([
   'get-grow-plants', 'post-grow-plants', 'put-grow-plants', 'delete-grow-plants',
   'get-grow-preparations', 'post-grow-preparations', 'put-grow-preparations', 'delete-grow-preparations',
   'get-grow-feeding-schedule', 'post-grow-feeding-schedule', 'delete-grow-feeding-schedule',
+  'get-grow-feeding-upcoming',
   'get-grow-plant-devices', 'post-grow-plant-devices', 'delete-grow-plant-devices',
   'get-grow-harvests', 'post-grow-harvests', 'delete-grow-harvests',
   'get-grow-settings', 'post-grow-settings',
@@ -248,6 +252,14 @@ class request {
       // Special handling for warehouse-packlists actions:
       // /warehouse-packlists/{id}/{action}  (check-out|return|status|items)
       else if( $requestPath[0] === 'warehouse-packlists' && $i == 1 && isset($requestPath[2]) && preg_match('/^[0-9]+$/Uis', $value) && !preg_match('/^[0-9]+$/Uis', $requestPath[2]) ) {
+        $this->request['id'] = (int)$value;
+        $this->request['subroute'] = $requestPath[2];
+        break; // We've consumed all relevant path segments
+      }
+      // Special handling for articles actions: /articles/{id}/{action} (favorite|comments)
+      // Ohne dies landet die Sub-Action als 'groupby' und POST/DELETE fallen
+      // destruktiv auf CREATE/DELETE des Artikels zurück.
+      else if( $requestPath[0] === 'articles' && $i == 1 && isset($requestPath[2]) && preg_match('/^[0-9]+$/Uis', $value) && !preg_match('/^[0-9]+$/Uis', $requestPath[2]) ) {
         $this->request['id'] = (int)$value;
         $this->request['subroute'] = $requestPath[2];
         break; // We've consumed all relevant path segments
@@ -608,8 +620,27 @@ class request {
       }
     }
 
+    // Handle articles favorite toggle: /articles/{id}/favorite
+    // MUSS vor dem generischen Articles-Block stehen, sonst fallen POST/DELETE
+    // destruktiv auf CREATE/DELETE des Artikels zurück.
+    if ($area === 'articles' && ($this->request['subroute'] ?? '') === 'favorite') {
+      if ($this->methode === 'POST' || $this->methode === 'DELETE') {
+        $requestArticleFavorite = new requestArticleFavorite($this->pdo, '');
+        $requestArticleFavorite->setArticleId((int)$this->request['id']);
+        $requestArticleFavorite->setFavorite($this->methode === 'POST');
+        $requestArticleFavorite->execute();
+        return true;
+      }
+      http_response_code(405);
+      header('Allow: POST, DELETE');
+      echo json_encode(['error' => 'Method Not Allowed', 'message' => 'favorite accepts POST or DELETE']);
+      return true;
+    }
+
     // Handle articles routes: /articles, /articles/{id}
-    if ($area === 'articles') {
+    // Nur ohne Subroute: unbekannte Sub-Actions (z.B. /comments) dürfen NICHT
+    // auf CREATE/DELETE des Artikels durchfallen.
+    if ($area === 'articles' && !isset($this->request['subroute'])) {
       if ($this->methode === 'GET') {
         $requestGetArticles = new requestGetArticles($this->pdo, '');
         $requestGetArticles->setRequest($this->request);
@@ -991,6 +1022,14 @@ class request {
             $handler->execute();
             return true;
         }
+    }
+
+    // /grow/feeding-upcoming  — kommende Dünge-Termine (Kalender-Vorschau)
+    if ($subroute === 'feeding-upcoming' && $this->methode === 'GET' && class_exists('requestGetGrowFeedingUpcoming')) {
+        $handler = new requestGetGrowFeedingUpcoming($this->pdo, '');
+        $handler->setRequest($this->request);
+        $handler->execute();
+        return true;
     }
 
     // /grow/settings ...
@@ -1557,9 +1596,25 @@ class request {
         return true;
     }
 
+    // GET /iot/device-keys — deviceKey→chipId für die Pi-Zentrale (Geräte-Key,
+    // typ=pi). Muss vor dem generischen devices-Handler stehen.
+    if ($subroute === 'device-keys' && $this->methode === 'GET') {
+        $handler = new requestGetIotDeviceKeys($this->pdo, '');
+        $handler->execute();
+        return true;
+    }
+
     // GET /iot/devices, GET /iot/devices/{id}
     if ($subroute === 'devices' && $this->methode === 'GET') {
         $handler = new requestGetIotDevices($this->pdo, '');
+        $handler->setRequest($this->request);
+        $handler->execute();
+        return true;
+    }
+
+    // DELETE /iot/devices/{id}
+    if ($subroute === 'devices' && $this->methode === 'DELETE') {
+        $handler = new requestDeleteIotDevices($this->pdo, '');
         $handler->setRequest($this->request);
         $handler->execute();
         return true;

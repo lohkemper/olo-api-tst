@@ -100,6 +100,46 @@ class requestGetArticles extends RequestBase {
     }
 
     /**
+     * Lädt EINEN Artikel angereichert (Tags, favorited, author) als Array zurück
+     * — ohne Ausgabe. Für Handler, die ein Einzel-Objekt brauchen (z.B. Favorite-
+     * Toggle). Gibt null zurück, wenn der Artikel nicht existiert.
+     */
+    public function fetchOneEnriched(int $id, ?array $user): ?array {
+        $sql = "
+            SELECT
+                a.articles_id,
+                a.user_id,
+                a.title,
+                a.description,
+                a.body,
+                a.slug,
+                a.favorites_count,
+                a.is_published,
+                a.published_at,
+                a.created_at,
+                a.updated_at,
+                u.users_id AS author_id,
+                u.username AS author_username,
+                u.email AS author_email,
+                u.first_name AS author_first_name,
+                u.last_name AS author_last_name
+            FROM " . PREFIX . "_articles a
+            LEFT JOIN " . PREFIX . "_users u ON a.user_id = u.users_id
+            WHERE a.articles_id = ?
+        ";
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([$id]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$row) {
+            return null;
+        }
+
+        return $this->enrichArticle($row, $user);
+    }
+
+    /**
      * Enrich article with tags, favorite status, and formatted author
      */
     private function enrichArticle(array $article, ?array $user): array {
