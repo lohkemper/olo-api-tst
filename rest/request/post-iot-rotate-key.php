@@ -49,6 +49,23 @@ class requestPostIotRotateKey extends RequestBase {
                 return;
             }
 
+            // ESP-Geraete koennen einen rotierten Key nicht entgegennehmen:
+            // ihre Firmware hat keinen Kanal dafuer, und der Selbstheilungs-
+            // pfad (Heartbeat 401 -> Re-Register) endet bei bekannter chip_id
+            // im 409. Eine Rotation wuerde das Geraet bis zum Neuflashen
+            // abmelden. Die Pi-Zentrale hat mit `pks-backend -set-api-key`
+            // einen Weg, ESPs nicht. Siehe STORY-4.4.
+            if (in_array($device['typ'], ['esp32', 'esp8266'], true)) {
+                http_response_code(400);
+                echo json_encode([
+                    'error' => 'Key rotation is not supported for ESP devices',
+                    'reason' => 'The device has no way to receive the new key and would stay offline until reflashed.',
+                    'remedy' => 'Delete the device and let it register again with the fleet token.',
+                    'typ' => $device['typ'],
+                ]);
+                return;
+            }
+
             $newKey = bin2hex(random_bytes(32));
             $newHash = hash('sha256', $newKey);
 
