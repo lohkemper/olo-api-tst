@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 if (!STOKEN) die('SEC');
 
+require_once __DIR__ . '/../lib/DeviceKey.php';
+
 /**
  * GET /iot/device-keys
  *
@@ -30,6 +32,11 @@ if (!STOKEN) die('SEC');
  *
  * Geraete ohne Sensoren und Aktoren (z.B. der Pi selbst) haben keinen
  * ableitbaren deviceKey und tauchen nicht auf.
+ *
+ * Die Ableitung selbst liegt in `lib/DeviceKey.php` und muss exakt mit
+ * `internal/topics.Parse` auf der Pi-Zentrale uebereinstimmen — beide
+ * schreiben in dieselbe `chip_id_map`. Die gemeinsame Fallsammlung steht in
+ * `tests/fixtures/device-key-derivation.json`.
  */
 class requestGetIotDeviceKeys extends RequestBase {
 
@@ -44,28 +51,47 @@ class requestGetIotDeviceKeys extends RequestBase {
                 return;
             }
 
-            // Ein Query statt zwei pro Geraet: der Pi ruft das alle 5 Minuten.
+            // Ein Query statt einer Abfrage pro Geraet: der Pi ruft das alle
+            // 5 Minuten. Die Sortierung ist nicht kosmetisch — sie stellt
+            // genau die Reihenfolge her, in der die Pi-Seite ihre Kandidaten
+            // durchgeht (Sensoren nach ID, dann Aktoren nach ID), damit beide
+            // bei mehreren Topics denselben Schluessel waehlen.
             $stmt = $this->pdo->query(
-                'SELECT d.chip_id,
-                        COALESCE(
-                          (SELECT s.mqtt_topic FROM mbc_iot_sensoren s
-                            WHERE s.mbc_iot_devices = d.iot_devices_id
-                            ORDER BY s.iot_sensoren_id LIMIT 1),
-                          (SELECT a.mqtt_topic_set FROM mbc_iot_aktoren a
-                            WHERE a.mbc_iot_devices = d.iot_devices_id
-                            ORDER BY a.iot_aktoren_id LIMIT 1)
-                        ) AS sample_topic
-                   FROM mbc_iot_devices d'
+                'SELECT iot_devices_id, chip_id, topic FROM (
+                     SELECT d.iot_devices_id, d.chip_id,
+                            s.mqtt_topic AS topic,
+                            0 AS quelle, s.iot_sensoren_id AS pos
+                       FROM mbc_iot_devices d
+                       JOIN mbc_iot_sensoren s ON s.mbc_iot_devices = d.iot_devices_id
+                     UNION ALL
+                     SELECT d.iot_devices_id, d.chip_id,
+                            a.mqtt_topic_set AS topic,
+                            1 AS quelle, a.iot_aktoren_id AS pos
+                       FROM mbc_iot_devices d
+                       JOIN mbc_iot_aktoren a ON a.mbc_iot_devices = d.iot_devices_id
+                 ) kandidaten
+                 ORDER BY iot_devices_id, quelle, pos'
             );
 
-            $out = [];
+            // Kandidaten je Geraet sammeln, damit ein unbrauchbares erstes
+            // Topic nicht das ganze Geraet aus der Antwort wirft. Genau das
+            // tat die fruehere Abfrage mit ihrem LIMIT 1.
+            $kandidaten = [];
+            $chipIds    = [];
             foreach ($stmt->fetchAll() as $row) {
-                $deviceKey = self::deviceKeyFromTopic($row['sample_topic'] ?? null);
-                if ($deviceKey === null || empty($row['chip_id'])) {
+                $id = $row['iot_devices_id'];
+                $chipIds[$id]      = $row['chip_id'];
+                $kandidaten[$id][] = $row['topic'];
+            }
+
+            $out = [];
+            foreach ($kandidaten as $id => $topics) {
+                $deviceKey = DeviceKey::fromTopics($topics);
+                if ($deviceKey === null || empty($chipIds[$id])) {
                     continue;
                 }
                 $out[] = [
-                    'chipId'    => $row['chip_id'],
+                    'chipId'    => $chipIds[$id],
                     'deviceKey' => $deviceKey,
                 ];
             }
@@ -78,19 +104,4 @@ class requestGetIotDeviceKeys extends RequestBase {
         }
     }
 
-    /**
-     * Die mittleren zwei Pfadteile aus `pks/{projekt}/{bereich}/{messwert}`
-     * ergeben den deviceKey, z.B. "garten/klima". Gleiche Ableitung wie
-     * `deriveDeviceKey()` in get-iot-devices.php.
-     */
-    private static function deviceKeyFromTopic(?string $topic): ?string {
-        if (!$topic) {
-            return null;
-        }
-        $parts = explode('/', trim($topic, '/'));
-        if (count($parts) < 3 || $parts[0] !== 'pks') {
-            return null;
-        }
-        return $parts[1] . '/' . $parts[2];
-    }
 }

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 if (!STOKEN) die('SEC');
 
+require_once __DIR__ . '/../lib/DeviceKey.php';
+
 /**
  * GET /iot/devices          — Alle registrierten Geräte
  * GET /iot/devices/{id}     — Einzelnes Gerät mit Sensoren und Aktoren
@@ -161,36 +163,28 @@ class requestGetIotDevices extends RequestBase {
      * Geräte ohne Sensoren und Aktoren (z.B. der Pi selbst) liefern null.
      *
      * Wiederhergestellt aus dem nie gemergten Commit 1b2d7b9 (STORY-1.11).
+     * Die Ableitung selbst liegt seit 2026-07-28 in `DeviceKey` — sie muss mit
+     * `topics.Parse` auf der Pi-Seite übereinstimmen, und zwei Kopien derselben
+     * Regel in zwei Dateien tun das erfahrungsgemäß nicht lange.
      */
     private function deriveDeviceKey(int $deviceId): ?string {
+        // Alle Kandidaten in der Reihenfolge, die auch der Pi verwendet:
+        // Sensoren nach ID, dann Aktoren nach ID. Vorher stand hier ein
+        // `LIMIT 1` auf den Sensoren — war dessen Topic unbrauchbar, lieferte
+        // die Ableitung null, obwohl ein zweiter Sensor gereicht hätte.
         $stmt = $this->pdo->prepare(
-            'SELECT mqtt_topic FROM mbc_iot_sensoren WHERE mbc_iot_devices = ?
-             ORDER BY iot_sensoren_id LIMIT 1'
+            'SELECT topic FROM (
+                 SELECT mqtt_topic AS topic, 0 AS quelle, iot_sensoren_id AS pos
+                   FROM mbc_iot_sensoren WHERE mbc_iot_devices = :dev
+                 UNION ALL
+                 SELECT mqtt_topic_set AS topic, 1 AS quelle, iot_aktoren_id AS pos
+                   FROM mbc_iot_aktoren WHERE mbc_iot_devices = :dev2
+             ) kandidaten
+             ORDER BY quelle, pos'
         );
-        $stmt->execute([$deviceId]);
-        $row = $stmt->fetch();
-        $topic = $row['mqtt_topic'] ?? null;
+        $stmt->execute([':dev' => $deviceId, ':dev2' => $deviceId]);
 
-        if (!$topic) {
-            $stmt = $this->pdo->prepare(
-                'SELECT mqtt_topic_set FROM mbc_iot_aktoren WHERE mbc_iot_devices = ?
-                 ORDER BY iot_aktoren_id LIMIT 1'
-            );
-            $stmt->execute([$deviceId]);
-            $row = $stmt->fetch();
-            $topic = $row['mqtt_topic_set'] ?? null;
-        }
-
-        if (!$topic) {
-            return null;
-        }
-
-        $parts = explode('/', trim($topic, '/'));
-        // Erwartet: pks/{projekt}/{bereich}/{messwert}
-        if (count($parts) < 3 || $parts[0] !== 'pks') {
-            return null;
-        }
-        return $parts[1] . '/' . $parts[2];
+        return DeviceKey::fromTopics($stmt->fetchAll(PDO::FETCH_COLUMN, 0));
     }
 
     /**
