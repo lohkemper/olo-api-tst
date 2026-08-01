@@ -20,6 +20,7 @@ class requestDeleteUserPermissions extends RequestBase {
             $this->log(['requestDeleteUserPermissions::request', $this->request]);
 
             // Require permission to manage permissions
+            CsrfHelper::requireValidToken();
             $currentUser = $this->requirePermission('permissions.manage');
 
             // Validate required parameters

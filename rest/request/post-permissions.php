@@ -28,8 +28,9 @@ class requestPostPermissions extends RequestBase {
             $this->log(['requestPostPermissions::request', $this->request]);
             $this->log(['requestPostPermissions::data', $this->data]);
 
-            // Require permission to create permissions
-            $user = $this->requirePermission('permissions.create');
+            // Require permission to create permissions (existierende Permission: permissions.manage)
+            CsrfHelper::requireValidToken();
+            $user = $this->requireAnyPermission(['permissions.manage', 'admin.access']);
 
             // Validate required fields
             $validation = $this->validatePermissionData($this->data);

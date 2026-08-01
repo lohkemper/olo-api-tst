@@ -100,6 +100,14 @@ class requestPutWarehouseLocations extends RequestBase {
             $params[] = json_encode($_PUT['meta']);
         }
 
+        // Maße + Grid (alle nullable INT UNSIGNED)
+        foreach (['grid_rows', 'grid_cols', 'width_cm', 'height_cm', 'depth_cm'] as $col) {
+            if (array_key_exists($col, $_PUT)) {
+                $updates[] = "$col = ?";
+                $params[] = $this->nullableUint($_PUT[$col]);
+            }
+        }
+
         // Handle parent_id updates (null is allowed for root locations)
         if (array_key_exists('parent_id', $_PUT)) {
             $newParentId = $_PUT['parent_id'];
@@ -248,6 +256,17 @@ class requestPutWarehouseLocations extends RequestBase {
         http_response_code(200);
         header('Content-Type: application/json');
         echo json_encode($affectedLocations);
+    }
+
+    /**
+     * Normalisiert Eingabe zu UNSIGNED INT oder NULL.
+     * Akzeptiert nur positive Ganzzahlen; leere Strings/0/non-numeric → NULL.
+     */
+    private function nullableUint(mixed $value): ?int {
+        if ($value === null || $value === '' || $value === false) return null;
+        if (!is_numeric($value)) return null;
+        $i = (int)$value;
+        return $i > 0 ? $i : null;
     }
 
     /**

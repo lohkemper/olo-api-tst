@@ -26,6 +26,7 @@ class requestDeleteRolePermissions extends RequestBase {
             $this->log(['requestDeleteRolePermissions::data', $this->data]);
 
             // Require permission to manage permissions
+            CsrfHelper::requireValidToken();
             $currentUser = $this->requirePermission('permissions.manage');
 
             // Get role_id and permission_id from request path

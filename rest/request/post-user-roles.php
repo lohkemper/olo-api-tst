@@ -26,6 +26,7 @@ class requestPostUserRoles extends RequestBase {
             $this->log(['requestPostUserRoles::data', $this->data]);
 
             // Require permission to manage roles
+            CsrfHelper::requireValidToken();
             $currentUser = $this->requirePermission('roles.manage');
 
             // Get target user ID

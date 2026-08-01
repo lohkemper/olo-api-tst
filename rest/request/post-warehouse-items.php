@@ -57,8 +57,9 @@ class requestPostWarehouseItems extends RequestBase {
             // Insert item
             $sql = "
                 INSERT INTO " . PREFIX . "_warehouse_items
-                (name, description, location_id, quantity, unit, barcode, image_url, meta, user_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (name, description, location_id, quantity, unit, barcode, image_url, meta,
+                 grid_row, grid_col, user_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ";
 
             $stmt = $this->pdo->prepare($sql);
@@ -71,6 +72,8 @@ class requestPostWarehouseItems extends RequestBase {
                 $this->data['barcode'] ?? null,
                 $this->data['image_url'] ?? null,
                 isset($this->data['meta']) ? json_encode($this->data['meta']) : null,
+                $this->nullableUint($this->data['grid_row'] ?? null),
+                $this->nullableUint($this->data['grid_col'] ?? null),
                 $userId
             ]);
 
@@ -147,6 +150,17 @@ class requestPostWarehouseItems extends RequestBase {
         $stmt->execute([$tagName]);
 
         return (int)$this->pdo->lastInsertId();
+    }
+
+    /**
+     * Normalisiert Eingabe zu UNSIGNED INT oder NULL.
+     * Akzeptiert nur positive Ganzzahlen; leere Strings/0/non-numeric → NULL.
+     */
+    private function nullableUint(mixed $value): ?int {
+        if ($value === null || $value === '' || $value === false) return null;
+        if (!is_numeric($value)) return null;
+        $i = (int)$value;
+        return $i > 0 ? $i : null;
     }
 
     /**

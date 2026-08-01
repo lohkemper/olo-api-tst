@@ -57,16 +57,16 @@ class requestGetPermissions extends RequestBase {
         $stmt->execute();
         $permissions = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        // Format permissions
+        // Format permissions (camelCase, matched Frontend-Interface Permission)
         $formattedPermissions = array_map(function($permission) {
             return [
-                'permissions_id' => (int)$permission['permissions_id'],
+                'id' => (int)$permission['permissions_id'],
                 'name' => $permission['name'],
                 'resource' => $permission['resource'],
                 'action' => $permission['action'],
                 'scope' => $permission['scope'],
                 'description' => $permission['description'] ?? '',
-                'created_at' => $permission['created_at']
+                'createdAt' => $permission['created_at']
             ];
         }, $permissions);
 
@@ -103,12 +103,21 @@ class requestGetPermissions extends RequestBase {
             return;
         }
 
-        $permission['permissions_id'] = (int)$permission['permissions_id'];
+        // Format (camelCase, matched Frontend-Interface Permission)
+        $formatted = [
+            'id' => (int)$permission['permissions_id'],
+            'name' => $permission['name'],
+            'resource' => $permission['resource'],
+            'action' => $permission['action'],
+            'scope' => $permission['scope'],
+            'description' => $permission['description'] ?? '',
+            'createdAt' => $permission['created_at'],
+        ];
 
         // Return as array for consistent API responses (ISO 25010 - Kompatibilität)
         http_response_code(200);
         header('Content-Type: application/json');
-        echo json_encode([$permission]);
+        echo json_encode([$formatted]);
     }
 
 }

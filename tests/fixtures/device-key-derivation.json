@@ -1,0 +1,84 @@
+{
+  "$comment": "Kanonische Fassung. Kopien liegen in beiden Submodulen (siehe README.md); check-contract-drift.sh vergleicht sie.",
+  "contract": "device_key aus MQTT-Topic",
+  "version": 1,
+  "authority": "internal/topics.Parse in olo-go",
+  "rules": [
+    "Trennzeichen ist '/', ohne vorheriges Trimmen.",
+    "Mindestens 4 Segmente: pks / {projekt} / {geraet} / {komponente}.",
+    "Segment 0 muss exakt 'pks' sein.",
+    "Kein Segment darf leer sein.",
+    "device_key = {projekt}/{geraet}."
+  ],
+  "cases": [
+    {
+      "topic": "pks/garten/pflanze4/boden",
+      "deviceKey": "garten/pflanze4",
+      "why": "Der Normalfall: Sensor-Topic mit vier Segmenten."
+    },
+    {
+      "topic": "pks/garten/pflanze4/boden/raw",
+      "deviceKey": "garten/pflanze4",
+      "why": "Detail-Segment gehoert zur Metrik, nicht zum Geraet."
+    },
+    {
+      "topic": "pks/garten/pflanze4/pumpe/set",
+      "deviceKey": "garten/pflanze4",
+      "why": "Aktor-Set-Topic ergibt denselben Schluessel wie der Sensor desselben Geraets."
+    },
+    {
+      "topic": "pks/garten/pflanze4/pumpe/status/extra",
+      "deviceKey": "garten/pflanze4",
+      "why": "Tiefere Hierarchien kollabieren in das Detail, der Schluessel bleibt gleich."
+    },
+    {
+      "topic": "pks/garten/4-pumpen/pumpe-3/set",
+      "deviceKey": "garten/4-pumpen",
+      "why": "Ziffern und Bindestriche sind erlaubt (Modul 5, Chip 3cf40d)."
+    },
+    {
+      "topic": "pks/garten/pflanze4",
+      "deviceKey": null,
+      "divergence": "PHP akzeptierte drei Segmente und lieferte garten/pflanze4.",
+      "why": "Ohne Komponente ist es kein Messwert-Topic. Der Pi verwirft es, also darf der Server dafuer keinen Schluessel melden."
+    },
+    {
+      "topic": "/pks/garten/pflanze4/boden",
+      "deviceKey": null,
+      "divergence": "PHP trimmte fuehrende Schraegstriche weg und lieferte garten/pflanze4.",
+      "why": "Der Pi parst das empfangene Topic ungetrimmt und verwirft es. Ein Schluessel, den der Pi nie bildet, findet in chip_id_map keinen Partner."
+    },
+    {
+      "topic": "pks/garten/pflanze4/boden/",
+      "deviceKey": null,
+      "divergence": "PHP trimmte den Schraegstrich am Ende weg und lieferte garten/pflanze4.",
+      "why": "Leeres letztes Segment. Gleiche Begruendung wie oben."
+    },
+    {
+      "topic": "pks//pflanze4/boden",
+      "deviceKey": null,
+      "divergence": "PHP lieferte '/pflanze4' — ein Schluessel mit leerem Projekt.",
+      "why": "Ein leeres Segment macht den Schluessel mehrdeutig; zwei Projekte koennten kollidieren."
+    },
+    {
+      "topic": "garten/pflanze4/boden/raw",
+      "deviceKey": null,
+      "why": "Fehlendes pks-Praefix — gehoert nicht in den PKS-Namensraum."
+    },
+    {
+      "topic": "pks/_prov/63afae/register",
+      "deviceKey": "_prov/63afae",
+      "why": "Bewusst ableitbar, aber irrelevant: Provisioning-Topics werden vor der Ableitung abgefangen (provisioning.Handles). Der Fall steht hier, damit niemand die Ableitung mit der Zustaendigkeit verwechselt."
+    },
+    {
+      "topic": "pks/garten",
+      "deviceKey": null,
+      "why": "Zu kurz."
+    },
+    {
+      "topic": "",
+      "deviceKey": null,
+      "why": "Leeres Topic."
+    }
+  ]
+}

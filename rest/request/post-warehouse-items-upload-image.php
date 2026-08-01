@@ -23,6 +23,28 @@ class requestPostWarehouseItemsUploadImage extends RequestBase {
         'image/heif',
     ];
     /**
+     * Kanonische Extension je erkanntem MIME-Typ. Die gespeicherte Datei-
+     * Endung wird hieraus abgeleitet — der vom Client gelieferte Dateiname
+     * wird NICHT vertraut (Spec file-upload.md: nie Original-Filename im FS).
+     */
+    private const MIME_TO_EXT = [
+        'image/jpeg' => 'jpg',
+        'image/png'  => 'png',
+        'image/webp' => 'webp',
+        'image/heic' => 'heic',
+        'image/heif' => 'heic',
+    ];
+    /**
+     * MIME-Typen, die PHP nativ dekodieren kann und daher zusätzlich per
+     * getimagesize() strukturell verifiziert werden. HEIC/HEIF unterstützt
+     * getimagesize() nicht — dort bleibt es beim finfo-Magic-Bytes-Check.
+     */
+    private const STRUCTURALLY_VERIFIABLE = [
+        'image/jpeg',
+        'image/png',
+        'image/webp',
+    ];
+    /**
      * Zielverzeichnis relativ zu diesem Handler-File (`<api-root>/request/`).
      * Eine Ebene rauf nach `<api-root>/`, dann nach `uploads/items/`.
      * Auf Prod: `rest2/uploads/items/`. Lokal: `rest/uploads/items/`.
@@ -81,6 +103,24 @@ class requestPostWarehouseItemsUploadImage extends RequestBase {
                 echo json_encode(['error' => 'Unsupported MIME type', 'mime' => $mime]);
                 return;
             }
+
+            // Magic-Bytes-Verifikation: finfo (oben) hat den echten MIME aus dem
+            // Datei-Header gelesen. Für nativ dekodierbare Raster-Formate zusätzlich
+            // strukturell prüfen, dass es ein valides Bild ist — fängt Polyglots,
+            // truncated/gefälschte Files, die nur den Header faken.
+            // Spec: file-upload.md ("Server prüft Header gegen Fake-Files").
+            if (in_array($mime, self::STRUCTURALLY_VERIFIABLE, true)) {
+                $imageInfo = @getimagesize($tmp);
+                if ($imageInfo === false || ($imageInfo['mime'] ?? '') !== $mime) {
+                    http_response_code(415);
+                    echo json_encode(['error' => 'File is not a valid image (header verification failed)']);
+                    return;
+                }
+            }
+
+            // Gespeicherte Extension aus dem ERKANNTEN MIME ableiten — der
+            // (manipulierbare) Client-Dateiname/-Extension wird nicht vertraut.
+            $ext = self::MIME_TO_EXT[$mime];
 
             $targetDir = __DIR__ . '/' . self::TARGET_DIR_REL;
             if (!is_dir($targetDir) && !mkdir($targetDir, 0775, true) && !is_dir($targetDir)) {

@@ -5,7 +5,7 @@ error_reporting(E_ALL);
 ini_set("display_errors", 1);
 
 // === CORS FIX START ===
-$allowedOrigins = ['http://localhost:4200', 'http://localhost:4201', 'https://oliverlohkemper.de', 'https://www.oliverlohkemper.de'];
+$allowedOrigins = ['http://localhost:4200', 'http://localhost:4202', 'https://oliverlohkemper.de', 'https://www.oliverlohkemper.de'];
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
 if (in_array($origin, $allowedOrigins)) {
     header("Access-Control-Allow-Origin: $origin");
@@ -34,6 +34,7 @@ include('cfg/cfg.php');
 include('auth/session-helper.php');
 include('auth/security-headers.php');
 include('auth/api-key-auth.php');
+include('auth/provisioning-auth.php');
 include('request/request.php');
 
 // Send security headers (HSTS, X-Content-Type-Options, ...)

@@ -44,7 +44,10 @@ class requestPostLogin extends RequestBase {
                     username,
                     password_hash,
                     first_name,
-                    last_name
+                    last_name,
+                    theme,
+                    density,
+                    accent
                 FROM " . PREFIX . "_users
                 WHERE email = :email
                 LIMIT 1
@@ -111,16 +114,23 @@ class requestPostLogin extends RequestBase {
             // Response (without accessToken in body - it's now in cookie)
             $response = [
                 'user' => [
-                    'users_id' => (int)$user['users_id'],
+                    'id' => (int)$user['users_id'],
                     'email' => $user['email'],
                     'username' => $user['username'],
-                    'first_name' => $user['first_name'] ?? null,
-                    'last_name' => $user['last_name'] ?? null,
+                    'firstName' => $user['first_name'] ?? null,
+                    'lastName' => $user['last_name'] ?? null,
                     'roles' => $user['roles'],
                     'permissions' => $user['permissions']
                 ],
                 'csrfToken' => $csrfToken
             ];
+
+            // UI-Präferenzen nur mitliefern, wenn gesetzt (NULL → Client-Default).
+            foreach (['theme', 'density', 'accent'] as $pref) {
+                if (!empty($user[$pref])) {
+                    $response['user'][$pref] = $user[$pref];
+                }
+            }
 
             http_response_code(200);
             header('Content-Type: application/json');
@@ -180,7 +190,7 @@ class requestPostLogin extends RequestBase {
 
         return array_map(function($permission) {
             return [
-                'permissions_id' => (int)$permission['permissions_id'],
+                'id' => (int)$permission['permissions_id'],
                 'name' => $permission['name'],
                 'resource' => $permission['resource'],
                 'action' => $permission['action'],
@@ -213,7 +223,7 @@ class requestPostLogin extends RequestBase {
 
         return array_map(function($permission) {
             return [
-                'permissions_id' => (int)$permission['permissions_id'],
+                'id' => (int)$permission['permissions_id'],
                 'name' => $permission['name'],
                 'resource' => $permission['resource'],
                 'action' => $permission['action'],

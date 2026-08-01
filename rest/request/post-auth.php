@@ -33,6 +33,10 @@ class requestPostAuth extends RequestBase {
                     $this->handleRefreshToken();
                     break;
 
+                case 'settings':
+                    $this->handleUpdateSettings();
+                    break;
+
                 default:
                     http_response_code(404);
                     echo json_encode(['error' => 'Auth endpoint not found']);
@@ -70,7 +74,7 @@ class requestPostAuth extends RequestBase {
         $response = [
             'csrfToken' => $_SESSION['csrf_token'],
             'user' => [
-                'id' => (int)$user['id'],
+                'id' => (int)($user['users_id'] ?? $user['id'] ?? 0),
                 'email' => $user['email'],
                 'username' => $user['username'],
                 'bio' => $user['bio'] ?? '',
@@ -84,6 +88,59 @@ class requestPostAuth extends RequestBase {
     }
 
     /**
+     * POST /api/auth/settings
+     * Aktualisiert die UI-Präferenzen (theme/density/accent) des eingeloggten
+     * Users. Reines Selbst-Update — keine Admin-Permission nötig.
+     */
+    private function handleUpdateSettings(): void {
+        CsrfHelper::requireValidToken();
+        $user = $this->requireAuth();
+        $userId = (int)($user['users_id'] ?? $user['id'] ?? 0);
+        if ($userId <= 0) {
+            http_response_code(401);
+            echo json_encode(['error' => 'Not authenticated']);
+            return;
+        }
+
+        $allowed = [
+            'theme' => ['light', 'dark', 'auto'],
+            'density' => ['comfortable', 'compact'],
+            'accent' => ['sodium', 'cyan', 'acid', 'plasma', 'amber'],
+        ];
+
+        $sets = [];
+        $params = ['id' => $userId];
+        foreach ($allowed as $field => $valid) {
+            if (!array_key_exists($field, $this->data)) {
+                continue;
+            }
+            $value = $this->data[$field];
+            if ($value !== null && !in_array($value, $valid, true)) {
+                http_response_code(400);
+                echo json_encode(['error' => 'Invalid value for ' . $field]);
+                return;
+            }
+            $sets[] = "`$field` = :$field";
+            $params[$field] = $value;
+        }
+
+        if (empty($sets)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'No settings provided']);
+            return;
+        }
+
+        $stmt = $this->pdo->prepare(
+            "UPDATE " . PREFIX . "_users SET " . implode(', ', $sets) . " WHERE users_id = :id"
+        );
+        $stmt->execute($params);
+
+        http_response_code(200);
+        header('Content-Type: application/json');
+        echo json_encode(['success' => true]);
+    }
+
+    /**
      * Generate JWT token for user
      * Simplified version - in production use a proper JWT library
      */
@@ -94,7 +151,7 @@ class requestPostAuth extends RequestBase {
         ]);
 
         $payload = json_encode([
-            'userId' => $user['id'],
+            'userId' => $user['users_id'] ?? $user['id'] ?? null,
             'username' => $user['username'],
             'email' => $user['email'],
             'iat' => time(),

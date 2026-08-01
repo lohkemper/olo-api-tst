@@ -1343,7 +1343,6 @@ Beispiel-Tabelle:
 ```
 Allowed Origins:
   - http://localhost:4200
-  - http://localhost:4201
   - https://oliverlohkemper.de
   - https://www.oliverlohkemper.de
 
@@ -1703,7 +1702,6 @@ FILE_TYPES    = ['jpg', 'png', 'jpeg', 'gif']
 ```
 allowedOrigins = [
   'http://localhost:4200',
-  'http://localhost:4201',
   'https://oliverlohkemper.de',
   'https://www.oliverlohkemper.de'
 ]

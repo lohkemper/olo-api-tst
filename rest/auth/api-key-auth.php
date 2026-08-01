@@ -18,10 +18,16 @@ class ApiKeyAuth {
      *
      * @param PDO $pdo
      * @param string[]|null $allowedTypes optionaler Typ-Filter (z.B. ['pi'])
-     * @return array|null Device-Row (iot_devices_id, chip_id, typ) oder null,
-     *                    wenn Fehler — Response wurde dann bereits gesendet.
+     * @param bool $requireApproved wenn true (Default), muss das Gerät
+     *             `provisioning_status = 'approved'` sein — `pending`/`revoked`
+     *             ergeben 403 (schließt L3: nicht freigegebene Geräte dürfen
+     *             keine Daten senden). Endpoints, die `pending` erlauben (z.B.
+     *             Heartbeat-Polling), übergeben false und prüfen den Status selbst.
+     * @return array|null Device-Row (iot_devices_id, chip_id, typ,
+     *                    provisioning_status) oder null, wenn Fehler — Response
+     *                    wurde dann bereits gesendet.
      */
-    public static function authenticateDevice(PDO $pdo, ?array $allowedTypes = null): ?array {
+    public static function authenticateDevice(PDO $pdo, ?array $allowedTypes = null, bool $requireApproved = true): ?array {
         header('Content-Type: application/json; charset=utf-8');
 
         $apiKey = $_SERVER['HTTP_X_API_KEY'] ?? '';
@@ -32,7 +38,7 @@ class ApiKeyAuth {
         }
 
         $stmt = $pdo->prepare(
-            'SELECT iot_devices_id, chip_id, typ FROM mbc_iot_devices WHERE api_key_hash = ?'
+            'SELECT iot_devices_id, chip_id, typ, provisioning_status FROM mbc_iot_devices WHERE api_key_hash = ?'
         );
         $stmt->execute([hash('sha256', $apiKey)]);
         $device = $stmt->fetch();
@@ -48,6 +54,15 @@ class ApiKeyAuth {
             echo json_encode([
                 'error' => 'Device type not allowed for this endpoint',
                 'allowed_types' => $allowedTypes,
+            ]);
+            return null;
+        }
+
+        if ($requireApproved && ($device['provisioning_status'] ?? '') !== 'approved') {
+            http_response_code(403);
+            echo json_encode([
+                'error' => 'Device not approved',
+                'provisioning_status' => $device['provisioning_status'] ?? 'unknown',
             ]);
             return null;
         }

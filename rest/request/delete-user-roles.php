@@ -20,6 +20,7 @@ class requestDeleteUserRoles extends RequestBase {
             $this->log(['requestDeleteUserRoles::request', $this->request]);
 
             // Require permission to manage roles
+            CsrfHelper::requireValidToken();
             $currentUser = $this->requirePermission('roles.manage');
 
             // Validate required parameters

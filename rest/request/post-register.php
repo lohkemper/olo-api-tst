@@ -91,12 +91,12 @@ class requestPostRegister extends RequestBase {
             // Response
             $response = [
                 'user' => [
-                    'users_id' => (int)$user['users_id'],
+                    'id' => (int)$user['users_id'],
                     'email' => $user['email'],
                     'username' => $user['username'],
-                    'first_name' => $user['first_name'] ?? '',
-                    'last_name' => $user['last_name'] ?? '',
-                    'is_active' => (bool)($user['is_active'] ?? true),
+                    'firstName' => $user['first_name'] ?? '',
+                    'lastName' => $user['last_name'] ?? '',
+                    'isActive' => (bool)($user['is_active'] ?? true),
                     'roles' => $user['roles'],
                     'permissions' => $user['permissions']
                 ],
@@ -312,7 +312,7 @@ class requestPostRegister extends RequestBase {
 
         return array_map(function($permission) {
             return [
-                'permissions_id' => (int)$permission['permissions_id'],
+                'id' => (int)$permission['permissions_id'],
                 'name' => $permission['name'],
                 'resource' => $permission['resource'],
                 'action' => $permission['action'],
@@ -345,7 +345,7 @@ class requestPostRegister extends RequestBase {
 
         return array_map(function($permission) {
             return [
-                'permissions_id' => (int)$permission['permissions_id'],
+                'id' => (int)$permission['permissions_id'],
                 'name' => $permission['name'],
                 'resource' => $permission['resource'],
                 'action' => $permission['action'],
