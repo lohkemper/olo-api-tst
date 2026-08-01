@@ -8,11 +8,16 @@ if (!STOKEN) die('SEC');
  * POST /iot/devices/{id}/rotate-key
  *
  * Rotiert den API-Key eines Geraets. Admin-only (Session-Auth via
- * RequestBase::requireAuth). Generiert einen neuen 32-Byte-Key,
- * speichert nur den SHA-256-Hash in der DB, setzt api_key_rotated_at
- * und liefert den Klartext-Key genau einmal in der Response zurueck.
- * Der Klartext wird NICHT gespeichert — nach dem Response existiert
- * er nirgends mehr auf dem Server.
+ * RequestBase::requireAuth). Generiert einen neuen 32-Byte-Key und liefert
+ * ihn genau einmal in der Response zurueck.
+ *
+ * Gespeichert werden derzeit BEIDE Formen: der SHA-256-Hash in `api_key_hash`
+ * (dagegen wird authentifiziert, siehe auth/api-key-auth.php) UND der Klartext
+ * in `api_key`. Die Klartextspalte ist der Notfall-Ausweg, ueber den der Pi
+ * am 2026-07-26 aus seiner Aussperrung zurueckgeholt wurde (STORY-1.10). Ob
+ * sie bleibt oder entfaellt — dann leistet das Hashen erst seinen Zweck —
+ * entscheidet TASK-2.6.1. Bis dahin sagt dieser Kommentar, was der Code tut,
+ * statt das Gegenteil zu behaupten.
  */
 class requestPostIotRotateKey extends RequestBase {
     private int $deviceId = 0;
@@ -69,6 +74,9 @@ class requestPostIotRotateKey extends RequestBase {
             $newKey = bin2hex(random_bytes(32));
             $newHash = hash('sha256', $newKey);
 
+            // Schreibt bewusst beides: Hash zum Authentifizieren, Klartext als
+            // Notfall-Ausweg. Das ist der offene Punkt aus TASK-2.6.1 — nicht
+            // aus Versehen, sondern noch nicht entschieden.
             $update = $this->pdo->prepare(
                 'UPDATE mbc_iot_devices
                  SET api_key = ?, api_key_hash = ?, api_key_rotated_at = NOW(), updated_at = NOW()
