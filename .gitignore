@@ -1,0 +1,10 @@
+# Local helper scripts that carry live credentials must never be tracked.
+# Introduced after tests/_local_password_check.php — which held the production
+# DB password in cleartext — sat untracked in the working tree (TASK-1.12.7).
+# Run integration tests against the live API via env vars instead
+# (IOT_ADMIN_EMAIL / IOT_ADMIN_PASSWORD), the way tests/integration-test-*.sh do.
+_local_*
+
+# Environment / secret files
+.env
+*.env
