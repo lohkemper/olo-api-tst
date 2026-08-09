@@ -70,6 +70,21 @@ SELECT u.`users_id`, r.`roles_id`
           AND ur.`role_id` = r.`roles_id`
    );
 
+-- 4. Rolle 'super_admin' zuweisen, falls die Zuordnung fehlt.
+--    Die A-Z-Cypress-Suiten (az-navigation/az-content) besuchen auch die
+--    /admin/*-Routen (roleGuard: admin|super_admin) — ohne Admin-Rolle
+--    bouncen diese nach /unauthorized und die Suiten schlagen fehl.
+INSERT INTO `mbc_user_roles` (`user_id`, `role_id`)
+SELECT u.`users_id`, r.`roles_id`
+  FROM `mbc_users` u
+  JOIN `mbc_roles` r ON r.`name` = 'super_admin'
+ WHERE u.`email` = 'testaccount@nhd.com'
+   AND NOT EXISTS (
+       SELECT 1 FROM `mbc_user_roles` ur
+        WHERE ur.`user_id` = u.`users_id`
+          AND ur.`role_id` = r.`roles_id`
+   );
+
 -- Kontrolle:
 -- SELECT u.users_id, u.email, u.username, u.is_active, r.name AS role
 --   FROM mbc_users u
