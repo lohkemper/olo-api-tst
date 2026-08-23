@@ -66,8 +66,9 @@ class requestPostLogin extends RequestBase {
                 return;
             }
 
-            // Verify password
-            if (!password_verify($password, $user['password_hash'])) {
+            // Verify password. Social-only-Konten haben password_hash NULL —
+            // ohne Guard würde password_verify() unter strict_types mit 500 abbrechen.
+            if (empty($user['password_hash']) || !password_verify($password, $user['password_hash'])) {
                 Logger::logSecurityEvent('Failed login attempt - invalid password', ['email' => $email]);
                 http_response_code(401);
                 echo json_encode([

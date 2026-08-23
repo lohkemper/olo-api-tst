@@ -9,6 +9,21 @@ include(__DIR__ . '/../auth/rate-limiter.php');
 if (is_file(__DIR__ . '/../auth/google-oauth.php')) {
   include __DIR__ . '/../auth/google-oauth.php';
 }
+// Social-Login (Google/Facebook) — Helper + Handler defensiv geladen: fehlt eine
+// Datei nach Teil-Deploy, sind nur die Social-Routen inaktiv.
+foreach ([
+  __DIR__ . '/../auth/social-login.php',
+  __DIR__ . '/../auth/jwt-session.php',
+  __DIR__ . '/get-social-url.php',
+  __DIR__ . '/get-social-callback.php',
+  __DIR__ . '/get-social-pending.php',
+  __DIR__ . '/post-social-complete.php',
+  __DIR__ . '/post-social-link.php',
+] as $socialAuthFile) {
+  if (is_file($socialAuthFile)) {
+    include $socialAuthFile;
+  }
+}
 include('get.php');
 include('get-auth.php');
 include('get-users.php');
@@ -1697,6 +1712,30 @@ class request {
       return true;
     }
 
+    // Social-Login (Google/Facebook) — Klassen defensiv geprüft (Teil-Deploy).
+    if ($this->methode === 'GET' && $subroute === 'social-url' && class_exists('requestGetSocialUrl')) {
+      $handler = new requestGetSocialUrl($this->pdo, '');
+      $handler->setRequest($this->request);
+      $handler->execute();
+      return true;
+    }
+
+    if ($this->methode === 'GET' && in_array($subroute, ['google-callback', 'facebook-callback'])
+        && class_exists('requestGetSocialCallback')) {
+      $handler = new requestGetSocialCallback($this->pdo, '');
+      $handler->setRequest($this->request);
+      $handler->setProvider($subroute === 'google-callback' ? 'google' : 'facebook');
+      $handler->execute();
+      return true;
+    }
+
+    if ($this->methode === 'GET' && $subroute === 'social-pending' && class_exists('requestGetSocialPending')) {
+      $handler = new requestGetSocialPending($this->pdo, '');
+      $handler->setRequest($this->request);
+      $handler->execute();
+      return true;
+    }
+
     // POST routes
     if ($this->methode === 'POST') {
       switch ($subroute) {
@@ -1733,6 +1772,24 @@ class request {
           global $_PUT; $data = $_PUT;
           $requestPostAuth->setData($data ?? []);
           $requestPostAuth->execute();
+          return true;
+
+        // Social-Login: CSRF-pflichtig (bewusst NICHT exempt — die PHP-Session
+        // existiert beim Rücksprung bereits, Token kommt aus GET /auth/social-pending).
+        case 'social-complete':
+          if (!class_exists('requestPostSocialComplete')) break;
+          $handler = new requestPostSocialComplete($this->pdo, '');
+          global $_PUT; $data = $_PUT;
+          $handler->setData($data ?? []);
+          $handler->execute();
+          return true;
+
+        case 'social-link':
+          if (!class_exists('requestPostSocialLink')) break;
+          $handler = new requestPostSocialLink($this->pdo, '');
+          global $_PUT; $data = $_PUT;
+          $handler->setData($data ?? []);
+          $handler->execute();
           return true;
       }
     }
