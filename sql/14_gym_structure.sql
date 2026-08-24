@@ -576,6 +576,7 @@ CREATE TABLE IF NOT EXISTS mbc_gym_body_measurements (
 
   -- Composition
   weight_kg      DECIMAL(5,2) DEFAULT NULL,
+  height_cm      DECIMAL(5,2) DEFAULT NULL,
   body_fat_pct   DECIMAL(4,2) DEFAULT NULL,
   muscle_mass_kg DECIMAL(5,2) DEFAULT NULL,
 

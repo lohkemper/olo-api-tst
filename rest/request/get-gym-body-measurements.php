@@ -36,7 +36,7 @@ class requestGetGymBodyMeasurements extends RequestBase {
 
     private function getList(int $userId): void {
         $sql = 'SELECT body_measurements_id, user_id, measured_at,
-                       weight_kg, body_fat_pct, muscle_mass_kg,
+                       weight_kg, height_cm, body_fat_pct, muscle_mass_kg,
                        chest_cm, waist_cm, hips_cm,
                        arm_left_cm, arm_right_cm,
                        thigh_left_cm, thigh_right_cm,
@@ -65,7 +65,7 @@ class requestGetGymBodyMeasurements extends RequestBase {
     private function getById(int $userId, int $id): void {
         $stmt = $this->pdo->prepare(
             'SELECT body_measurements_id, user_id, measured_at,
-                    weight_kg, body_fat_pct, muscle_mass_kg,
+                    weight_kg, height_cm, body_fat_pct, muscle_mass_kg,
                     chest_cm, waist_cm, hips_cm,
                     arm_left_cm, arm_right_cm,
                     thigh_left_cm, thigh_right_cm,

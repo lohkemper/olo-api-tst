@@ -10,6 +10,7 @@ if (!STOKEN) die('SEC');
  *  {
  *    "measured_at": "2026-05-04",
  *    "weight_kg": 82.5,
+ *    "height_cm": 183.0,
  *    "body_fat_pct": 14.2,
  *    "muscle_mass_kg": 38.1,
  *    "chest_cm": 105.0,
@@ -48,7 +49,7 @@ class requestPostGymBodyMeasurements extends RequestBase {
             }
 
             $cols = [
-                'weight_kg','body_fat_pct','muscle_mass_kg',
+                'weight_kg','height_cm','body_fat_pct','muscle_mass_kg',
                 'chest_cm','waist_cm','hips_cm',
                 'arm_left_cm','arm_right_cm',
                 'thigh_left_cm','thigh_right_cm',
@@ -83,7 +84,7 @@ class requestPostGymBodyMeasurements extends RequestBase {
 
             $stmt = $this->pdo->prepare(
                 'SELECT body_measurements_id, user_id, measured_at,
-                        weight_kg, body_fat_pct, muscle_mass_kg,
+                        weight_kg, height_cm, body_fat_pct, muscle_mass_kg,
                         chest_cm, waist_cm, hips_cm,
                         arm_left_cm, arm_right_cm,
                         thigh_left_cm, thigh_right_cm,
