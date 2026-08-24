@@ -78,6 +78,29 @@ class requestPostLogin extends RequestBase {
                 return;
             }
 
+            // MFA-Challenge: hat der User bestätigte Methoden und kein gültiges
+            // Trusted-Device-Cookie, wird KEIN JWT ausgestellt — stattdessen
+            // Pending-Session + mfaRequired-Antwort (Plan: docs/planning/mfa-2fa.md).
+            // Ohne MFA bleibt der Bestandspfad byte-identisch.
+            if (class_exists('MfaHelper')) {
+                $mfaMethods = MfaHelper::confirmedMethods($this->pdo, (int)$user['users_id']);
+                if ($mfaMethods && !MfaHelper::isTrustedDevice($this->pdo, (int)$user['users_id'])) {
+                    MfaHelper::beginChallenge($this->pdo, (int)$user['users_id'], $mfaMethods, 'login');
+                    // Passwort-Stufe bestanden — mfa-verify hat ein eigenes Limit.
+                    $rateLimiter->reset('login');
+                    Logger::info('MFA challenge started', ['user_id' => $user['users_id'], 'origin' => 'login']);
+                    http_response_code(200);
+                    header('Content-Type: application/json');
+                    echo json_encode([
+                        'mfaRequired' => true,
+                        'methods' => $mfaMethods,
+                        'backupCodesAvailable' => MfaHelper::backupCodesRemaining($this->pdo, (int)$user['users_id']) > 0,
+                        'csrfToken' => CsrfHelper::generateToken(),
+                    ]);
+                    return;
+                }
+            }
+
             // Update last_login timestamp
             $updateStmt = $this->pdo->prepare("
                 UPDATE " . PREFIX . "_users

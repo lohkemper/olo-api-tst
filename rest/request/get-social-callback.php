@@ -88,6 +88,21 @@ class requestGetSocialCallback extends RequestBase {
                     $this->redirectError($returnBase, 'disabled');
                     return;
                 }
+
+                // MFA gilt einheitlich für alle Login-Wege: bestätigte Methoden
+                // + kein Trusted Device → Challenge statt Session (mfa-2fa.md).
+                if (class_exists('MfaHelper')) {
+                    $mfaMethods = MfaHelper::confirmedMethods($this->pdo, (int)$user['users_id']);
+                    if ($mfaMethods && !MfaHelper::isTrustedDevice($this->pdo, (int)$user['users_id'])) {
+                        MfaHelper::beginChallenge($this->pdo, (int)$user['users_id'], $mfaMethods, 'social');
+                        Logger::info('MFA challenge started', [
+                            'user_id' => (int)$user['users_id'], 'origin' => 'social',
+                        ]);
+                        $this->redirectTo($returnBase . '/login/verify');
+                        return;
+                    }
+                }
+
                 $this->pdo->prepare('UPDATE ' . PREFIX . '_users SET last_login = NOW() WHERE users_id = ?')
                     ->execute([(int)$user['users_id']]);
                 JwtSession::issue($this->pdo, $user);

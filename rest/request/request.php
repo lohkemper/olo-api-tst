@@ -24,6 +24,35 @@ foreach ([
     include $socialAuthFile;
   }
 }
+// MFA/2FA (Plan: docs/planning/mfa-2fa.md) — Helper + Handler defensiv geladen:
+// fehlt eine Datei nach Teil-Deploy, sind nur die MFA-Routen inaktiv.
+foreach ([
+  __DIR__ . '/../auth/crypto-helper.php',
+  __DIR__ . '/../auth/totp.php',
+  __DIR__ . '/../auth/mfa-helper.php',
+  __DIR__ . '/../lib/Mailer.php',
+  __DIR__ . '/../lib/MfaEmailCode.php',
+  __DIR__ . '/../lib/WebAuthnHelper.php',
+  __DIR__ . '/get-mfa-pending.php',
+  __DIR__ . '/get-mfa-status.php',
+  __DIR__ . '/post-mfa-verify.php',
+  __DIR__ . '/post-mfa-totp-setup.php',
+  __DIR__ . '/post-mfa-totp-confirm.php',
+  __DIR__ . '/post-mfa-totp-disable.php',
+  __DIR__ . '/post-mfa-backup-regenerate.php',
+  __DIR__ . '/post-mfa-trusted-revoke.php',
+  __DIR__ . '/post-mfa-email-send.php',
+  __DIR__ . '/post-mfa-email-confirm.php',
+  __DIR__ . '/post-webauthn-register-options.php',
+  __DIR__ . '/post-webauthn-register.php',
+  __DIR__ . '/post-webauthn-verify-options.php',
+  __DIR__ . '/get-webauthn-credentials.php',
+  __DIR__ . '/delete-webauthn-credentials.php',
+] as $mfaFile) {
+  if (is_file($mfaFile)) {
+    include $mfaFile;
+  }
+}
 include('get.php');
 include('get-auth.php');
 include('get-users.php');
@@ -1736,6 +1765,29 @@ class request {
       return true;
     }
 
+    // MFA/2FA-Routen (Plan: docs/planning/mfa-2fa.md), Klassen defensiv geprüft.
+    if ($this->methode === 'GET') {
+      $mfaGetHandlers = [
+        'mfa-pending' => 'requestGetMfaPending',
+        'mfa-status' => 'requestGetMfaStatus',
+        'webauthn-credentials' => 'requestGetWebauthnCredentials',
+      ];
+      if (isset($mfaGetHandlers[$subroute]) && class_exists($mfaGetHandlers[$subroute])) {
+        $handler = new $mfaGetHandlers[$subroute]($this->pdo, '');
+        $handler->setRequest($this->request);
+        $handler->execute();
+        return true;
+      }
+    }
+
+    if ($this->methode === 'DELETE' && $subroute === 'webauthn-credentials'
+        && class_exists('requestDeleteWebauthnCredentials')) {
+      $handler = new requestDeleteWebauthnCredentials($this->pdo, '');
+      $handler->setRequest($this->request);
+      $handler->execute();
+      return true;
+    }
+
     // POST routes
     if ($this->methode === 'POST') {
       switch ($subroute) {
@@ -1791,6 +1843,29 @@ class request {
           $handler->setData($data ?? []);
           $handler->execute();
           return true;
+      }
+
+      // MFA/2FA-POSTs (alle CSRF-pflichtig — bewusst NICHT in der Exempt-Liste;
+      // Token kommt aus der Login-Antwort bzw. GET /auth/mfa-pending).
+      $mfaPostHandlers = [
+        'mfa-verify' => 'requestPostMfaVerify',
+        'mfa-totp-setup' => 'requestPostMfaTotpSetup',
+        'mfa-totp-confirm' => 'requestPostMfaTotpConfirm',
+        'mfa-totp-disable' => 'requestPostMfaTotpDisable',
+        'mfa-backup-regenerate' => 'requestPostMfaBackupRegenerate',
+        'mfa-trusted-revoke' => 'requestPostMfaTrustedRevoke',
+        'mfa-email-send' => 'requestPostMfaEmailSend',
+        'mfa-email-confirm' => 'requestPostMfaEmailConfirm',
+        'webauthn-register-options' => 'requestPostWebauthnRegisterOptions',
+        'webauthn-register' => 'requestPostWebauthnRegister',
+        'webauthn-verify-options' => 'requestPostWebauthnVerifyOptions',
+      ];
+      if (isset($mfaPostHandlers[$subroute]) && class_exists($mfaPostHandlers[$subroute])) {
+        $handler = new $mfaPostHandlers[$subroute]($this->pdo, '');
+        global $_PUT; $data = $_PUT;
+        $handler->setData($data ?? []);
+        $handler->execute();
+        return true;
       }
     }
 
