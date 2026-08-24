@@ -164,6 +164,10 @@ include('get-gym-body-measurements.php');
 include('post-gym-body-measurements.php');
 include('put-gym-body-measurements.php');
 include('delete-gym-body-measurements.php');
+include('get-gym-blood-values.php');
+include('post-gym-blood-values.php');
+include('put-gym-blood-values.php');
+include('delete-gym-blood-values.php');
 include('get-gym-analytics.php');
 include('get-gym-cardio-sessions.php');
 include('post-gym-cardio-sessions.php');
@@ -1196,6 +1200,8 @@ class request {
    *  - /gym/workouts/{id}           GET (detail+sets), PUT (update/end), DELETE
    *  - /gym/workout-sets            POST (create)
    *  - /gym/workout-sets/{id}       PUT, DELETE
+   *  - /gym/blood-values            GET (list), POST (Panel-Upsert), DELETE (?measured_at=Tag)
+   *  - /gym/blood-values/{id}       GET, PUT, DELETE
    */
   private function handleGymRoutes(): bool {
     $subroute = $this->request['subroute'] ?? '';
@@ -1434,6 +1440,32 @@ class request {
         }
     }
 
+    // /gym/blood-values ... (Health — Key-Value-Zeitreihe, POST = Panel-Upsert)
+    if ($subroute === 'blood-values') {
+        if ($this->methode === 'GET') {
+            $handler = new requestGetGymBloodValues($this->pdo, '');
+            $handler->setRequest($this->request);
+            $handler->execute();
+            return true;
+        } elseif ($this->methode === 'POST') {
+            $handler = new requestPostGymBloodValues($this->pdo, '');
+            $handler->setData($_PUT ?? []);
+            $handler->execute();
+            return true;
+        } elseif ($this->methode === 'PUT') {
+            $handler = new requestPutGymBloodValues($this->pdo, '');
+            $handler->setRequest($this->request);
+            $handler->setData($_PUT ?? []);
+            $handler->execute();
+            return true;
+        } elseif ($this->methode === 'DELETE') {
+            $handler = new requestDeleteGymBloodValues($this->pdo, '');
+            $handler->setRequest($this->request);
+            $handler->execute();
+            return true;
+        }
+    }
+
     // /gym/cardio-sessions ...
     if ($subroute === 'cardio-sessions') {
         if ($this->methode === 'GET') {
@@ -1549,7 +1581,7 @@ class request {
     if (!in_array($subroute, [
         'exercises', 'exercise-categories', 'workouts', 'workout-sets',
         'plans', 'plan-days', 'plan-exercises', 'personal-records',
-        'body-measurements',
+        'body-measurements', 'blood-values',
         'cardio-sessions', 'foods', 'nutrition-entries',
         'plan-assignments',
         // 'warehouse-items' nicht: kein Detail-Endpoint nötig
