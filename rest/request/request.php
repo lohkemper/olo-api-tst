@@ -168,6 +168,8 @@ include('get-gym-blood-values.php');
 include('post-gym-blood-values.php');
 include('put-gym-blood-values.php');
 include('delete-gym-blood-values.php');
+include('get-gym-settings.php');
+include('post-gym-settings.php');
 include('get-gym-analytics.php');
 include('get-gym-cardio-sessions.php');
 include('post-gym-cardio-sessions.php');
@@ -1202,6 +1204,7 @@ class request {
    *  - /gym/workout-sets/{id}       PUT, DELETE
    *  - /gym/blood-values            GET (list), POST (Panel-Upsert), DELETE (?measured_at=Tag)
    *  - /gym/blood-values/{id}       GET, PUT, DELETE
+   *  - /gym/settings                GET, POST (User-Präferenzen, settings-JSON-Blob)
    */
   private function handleGymRoutes(): bool {
     $subroute = $this->request['subroute'] ?? '';
@@ -1461,6 +1464,21 @@ class request {
         } elseif ($this->methode === 'DELETE') {
             $handler = new requestDeleteGymBloodValues($this->pdo, '');
             $handler->setRequest($this->request);
+            $handler->execute();
+            return true;
+        }
+    }
+
+    // /gym/settings ... (User-Präferenzen, z.B. Health-Schnelleingabe-Konfig)
+    if ($subroute === 'settings') {
+        if ($this->methode === 'GET') {
+            $handler = new requestGetGymSettings($this->pdo, '');
+            $handler->setRequest($this->request);
+            $handler->execute();
+            return true;
+        } elseif ($this->methode === 'POST') {
+            $handler = new requestPostGymSettings($this->pdo, '');
+            $handler->setData($_PUT ?? []);
             $handler->execute();
             return true;
         }
