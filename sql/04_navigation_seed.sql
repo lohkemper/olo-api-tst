@@ -375,6 +375,50 @@ ON DUPLICATE KEY UPDATE
 
 COMMIT;
 
+
+-- >>> aus: 26_navigation_icon_iot_devices.sql ------------------------------------------------------------
+-- ============================================================================
+-- MBC Navigation - Icon für /iot/devices
+-- ============================================================================
+-- Erstellt: 2026-08-16
+--
+-- Beschreibung: Setzt `icon` = 'devices' für den IoT-Sub-Eintrag /iot/devices.
+--
+-- Hintergrund: Das Mega-Menü ist seit dem zweispaltigen Umbau icon-gesteuert
+-- (siehe docs/design/navigation-topnav.md): Children **mit** Icon rendern links
+-- als Tile-Link (Icon + Label + Description), Children **ohne** Icon rechts als
+-- kompakte Kategorie-Liste ohne Description. /iot/devices hat bereits eine
+-- description ('Registrierte IoT-Endpunkte verwalten', siehe 25er-Block oben),
+-- die ohne Icon gar nicht angezeigt würde.
+--
+-- Icon-Wert: 'devices' ist ein bestehender Alias im Frontend-ICON_MAP
+-- (projects/ui/src/lib/icon/icon-map.ts) → Carbon `devices/20`. Nicht
+-- gemappte Namen fallen auf `undefined` zurück und rendern kein Icon —
+-- der Eintrag würde dann still in der rechten Spalte landen.
+--
+-- Match über `route` statt `navigations_id` (Live-Bestand: id 63), weil die
+-- Route eindeutig und drift-sicher ist — analog zur Icon-Korrektur in
+-- 09_warehouse_seed.sql.
+-- ============================================================================
+
+START TRANSACTION;
+
+UPDATE `mbc_navigations` SET `icon` = 'devices' WHERE `route` = '/iot/devices';
+
+-- Schema-Version protokollieren (Primary Key = module → Re-Run überschreibt).
+INSERT INTO `mbc_schema_versions` (`module`, `version`, `description`)
+VALUES ('navigation', '1.6.0', 'Icon for /iot/devices (mega-menu featured column)')
+ON DUPLICATE KEY UPDATE
+  `version` = VALUES(`version`),
+  `description` = VALUES(`description`);
+
+COMMIT;
+
+-- Verifizierung:
+--   SELECT navigations_id, route, icon, description FROM mbc_navigations
+--   WHERE route = '/iot/devices';
+--   → erwartet: icon='devices', description='Registrierte IoT-Endpunkte verwalten'
+
 -- Verifizierung:
 --   SELECT navigations_id, title, route, description
 --   FROM mbc_navigations

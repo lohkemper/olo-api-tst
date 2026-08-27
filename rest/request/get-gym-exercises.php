@@ -39,7 +39,7 @@ class requestGetGymExercises extends RequestBase {
         // Equipment-Namen ohne extra Round-Trip anzeigen kann (Phase 4).
         $stmt = $this->pdo->prepare(
             'SELECT e.exercises_id, e.user_id, e.name, e.slug, e.category_id,
-                    e.equipment_article_id, e.primary_muscle, e.secondary_muscles,
+                    e.equipment_article_id, e.primary_muscle, e.primary_muscles, e.secondary_muscles,
                     e.exercise_type, e.measurement_type, e.description,
                     e.video_url, e.photo_url, e.is_template, e.created_at, e.updated_at,
                     wi.name AS equipment_name
@@ -55,7 +55,7 @@ class requestGetGymExercises extends RequestBase {
     private function getById(int $userId, int $exerciseId): void {
         $stmt = $this->pdo->prepare(
             'SELECT e.exercises_id, e.user_id, e.name, e.slug, e.category_id,
-                    e.equipment_article_id, e.primary_muscle, e.secondary_muscles,
+                    e.equipment_article_id, e.primary_muscle, e.primary_muscles, e.secondary_muscles,
                     e.exercise_type, e.measurement_type, e.description,
                     e.video_url, e.photo_url, e.is_template, e.created_at, e.updated_at,
                     wi.name AS equipment_name

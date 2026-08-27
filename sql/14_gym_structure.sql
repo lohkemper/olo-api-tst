@@ -902,14 +902,50 @@ CREATE TABLE IF NOT EXISTS mbc_gym_plan_assignments (
 
 COMMIT;
 
+
+-- >>> aus: 48_gym_primary_muscles.sql ----------------------------------------------------------------
+-- =====================================================================
+-- 48_gym_primary_muscles.sql
+-- Gym — mehrere Primärmuskeln pro Übung
+--
+-- Bisher hielt `primary_muscle VARCHAR(40)` genau einen Muskel. Die neue
+-- JSON-Spalte `primary_muscles` nimmt die vollständige Liste auf — analog zu
+-- `secondary_muscles`, das es schon gibt.
+--
+-- `primary_muscle` BLEIBT bestehen und führt weiterhin den ersten Eintrag:
+-- get-gym-analytics.php gruppiert darüber (COALESCE mit category.muscle_group)
+-- und get-gym-personal-records/-plans liefern ihn denormalisiert mit. Ein
+-- Backfill füllt die neue Spalte aus dem Altbestand.
+--
+-- Voraussetzung: mbc_gym_exercises (oben in dieser Datei).
+-- Idempotent: ADD COLUMN IF NOT EXISTS + UPDATE nur auf NULL-Zeilen.
+-- =====================================================================
+
+START TRANSACTION;
+
+ALTER TABLE `mbc_gym_exercises`
+  ADD COLUMN IF NOT EXISTS `primary_muscles` JSON DEFAULT NULL
+    COMMENT 'Primär beanspruchte Muskeln (Array); primary_muscle = erster Eintrag'
+    AFTER `primary_muscle`;
+
+-- Backfill: bestehende Einzelwerte in die Liste heben.
+UPDATE `mbc_gym_exercises`
+   SET `primary_muscles` = JSON_ARRAY(`primary_muscle`)
+ WHERE `primary_muscles` IS NULL
+   AND `primary_muscle` IS NOT NULL
+   AND `primary_muscle` <> '';
+
+COMMIT;
+
+
 -- ============================================================================
 -- Schema-Version
 -- ============================================================================
 
 INSERT INTO mbc_schema_versions (module, version, description)
-VALUES ('gym', '0.6.0', 'Phase 4 — Equipment-Link + Coach-Rolle')
+VALUES ('gym', '0.7.0', 'Phase 4 — Equipment-Link + Coach-Rolle; Multi-Primärmuskeln')
 ON DUPLICATE KEY UPDATE
-  version = '0.6.0',
+  version = '0.7.0',
   applied_at = CURRENT_TIMESTAMP,
-  description = 'Phase 4 — Equipment-Link + Coach-Rolle';
+  description = 'Phase 4 — Equipment-Link + Coach-Rolle; Multi-Primärmuskeln';
 

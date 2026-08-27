@@ -15,7 +15,8 @@ if (!STOKEN) die('SEC');
  *    "slug": "...",
  *    "category_id": 12,
  *    "equipment_article_id": 47,    // FK auf mbc_warehouse_items
- *    "primary_muscle": "chest",
+ *    "primary_muscle": "chest",                      // optional, sonst aus primary_muscles[0]
+ *    "primary_muscles": ["chest","front_delts"],
  *    "secondary_muscles": ["triceps","front_delts"],
  *    "exercise_type": "strength",
  *    "measurement_type": "weight_reps",
@@ -74,20 +75,33 @@ class requestPutGymExercises extends RequestBase {
 
             $allowed = [
                 'name','slug','category_id','equipment_article_id','primary_muscle',
-                'secondary_muscles','exercise_type','measurement_type',
+                'primary_muscles','secondary_muscles','exercise_type','measurement_type',
                 'description','video_url','photo_url',
             ];
+            $jsonFields = ['primary_muscles', 'secondary_muscles'];
             $sets = [];
             $params = [];
             foreach ($allowed as $f) {
                 if (!array_key_exists($f, $this->data)) continue;
                 $value = $this->data[$f];
-                if ($f === 'secondary_muscles' && $value !== null) {
-                    $value = json_encode($value);
+                if (in_array($f, $jsonFields, true) && $value !== null) {
+                    $value = json_encode(array_values((array)$value));
                 }
                 $sets[] = "$f = ?";
                 $params[] = $value;
             }
+
+            // Wird nur die Liste geschickt, zieht die Einzelspalte nach: sie ist
+            // die Gruppierungs-Grundlage von Analytics/PRs/Plänen.
+            if (array_key_exists('primary_muscles', $this->data)
+                && !array_key_exists('primary_muscle', $this->data)) {
+                $list = is_array($this->data['primary_muscles'])
+                    ? array_values($this->data['primary_muscles'])
+                    : [];
+                $sets[] = 'primary_muscle = ?';
+                $params[] = $list[0] ?? null;
+            }
+
             if (empty($sets)) {
                 http_response_code(400);
                 echo json_encode(['error' => 'No fields to update']);
@@ -109,7 +123,7 @@ class requestPutGymExercises extends RequestBase {
 
             $stmt = $this->pdo->prepare(
                 'SELECT e.exercises_id, e.user_id, e.name, e.slug, e.category_id,
-                        e.equipment_article_id, e.primary_muscle, e.secondary_muscles,
+                        e.equipment_article_id, e.primary_muscle, e.primary_muscles, e.secondary_muscles,
                         e.exercise_type, e.measurement_type, e.description,
                         e.video_url, e.photo_url, e.is_template, e.created_at, e.updated_at,
                         wi.name AS equipment_name

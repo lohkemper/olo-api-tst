@@ -11,7 +11,8 @@ if (!STOKEN) die('SEC');
  *    "name": "Bankdrücken (eigene Variante)",
  *    "slug": "bankdruecken-eigene-variante",
  *    "category_id": 12,
- *    "primary_muscle": "chest",
+ *    "primary_muscle": "chest",                         // optional, sonst aus primary_muscles[0]
+ *    "primary_muscles": ["chest","front_delts"],        // optional
  *    "secondary_muscles": ["triceps","front_delts"],   // optional
  *    "exercise_type": "strength",                       // strength|cardio|mobility|bodyweight
  *    "measurement_type": "weight_reps",                 // weight_reps|reps_only|time|distance|weight_time
@@ -55,12 +56,19 @@ class requestPostGymExercises extends RequestBase {
             $secondary = $this->data['secondary_muscles'] ?? null;
             $secondaryJson = $secondary !== null ? json_encode($secondary) : null;
 
+            // Primärmuskeln: Liste ist führend, die Einzelspalte trägt den ersten
+            // Eintrag weiter (Analytics/PRs/Pläne gruppieren darüber).
+            $primaryList = $this->data['primary_muscles'] ?? null;
+            $primaryList = is_array($primaryList) ? array_values($primaryList) : null;
+            $primaryJson = $primaryList !== null ? json_encode($primaryList) : null;
+            $primarySingle = $this->data['primary_muscle'] ?? ($primaryList[0] ?? null);
+
             $stmt = $this->pdo->prepare(
                 'INSERT INTO mbc_gym_exercises
                   (user_id, name, slug, category_id, equipment_article_id, primary_muscle,
-                   secondary_muscles, exercise_type, measurement_type, description,
+                   primary_muscles, secondary_muscles, exercise_type, measurement_type, description,
                    video_url, photo_url, is_template)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)'
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)'
             );
             $stmt->execute([
                 $userId,
@@ -68,7 +76,8 @@ class requestPostGymExercises extends RequestBase {
                 $slug,
                 $this->data['category_id'] ?? null,
                 $this->data['equipment_article_id'] ?? null,
-                $this->data['primary_muscle'] ?? null,
+                $primarySingle,
+                $primaryJson,
                 $secondaryJson,
                 $exerciseType,
                 $measurementType,
@@ -80,7 +89,7 @@ class requestPostGymExercises extends RequestBase {
             $newId = (int)$this->pdo->lastInsertId();
             $stmt = $this->pdo->prepare(
                 'SELECT exercises_id, user_id, name, slug, category_id, equipment_article_id,
-                        primary_muscle, secondary_muscles, exercise_type, measurement_type,
+                        primary_muscle, primary_muscles, secondary_muscles, exercise_type, measurement_type,
                         description, video_url, photo_url, is_template, created_at, updated_at
                  FROM mbc_gym_exercises WHERE exercises_id = ?'
             );

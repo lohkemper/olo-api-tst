@@ -64,7 +64,9 @@ class requestPutGymPlanExercises extends RequestBase {
                         pe.target_weight_kg, pe.target_rpe, pe.rest_seconds, pe.notes,
                         pe.created_at, pe.updated_at,
                         e.name AS exercise_name, e.measurement_type AS exercise_measurement_type,
-                        e.primary_muscle AS exercise_primary_muscle
+                        e.primary_muscle AS exercise_primary_muscle,
+                        e.primary_muscles AS exercise_primary_muscles,
+                        e.secondary_muscles AS exercise_secondary_muscles
                  FROM mbc_gym_plan_exercises pe
                  INNER JOIN mbc_gym_exercises e ON e.exercises_id = pe.exercise_id
                  WHERE pe.plan_exercises_id = ?'
