@@ -8,3 +8,10 @@ _local_*
 # Environment / secret files
 .env
 *.env
+
+# Hochgeladene Nutzdaten (Item-Fotos etc.) sind Laufzeit-Daten und gehören
+# nicht ins Repo — nur die Struktur (.htaccess-Schutz, .gitkeep) bleibt getrackt.
+rest/uploads/**
+!rest/uploads/.htaccess
+!rest/uploads/items/
+!rest/uploads/items/.gitkeep
