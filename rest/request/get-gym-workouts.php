@@ -37,13 +37,24 @@ class requestGetGymWorkouts extends RequestBase {
         $limit  = max(1, min(200, (int)($this->request['limit']  ?? 50)));
         $offset = max(0, (int)($this->request['offset'] ?? 0));
 
-        // Aktive Sessions zuerst (ended_at IS NULL), dann nach started_at DESC
-        $sql = 'SELECT workouts_id, user_id, plan_day_id, started_at, ended_at, name,
-                       notes, body_weight_kg, total_volume_kg, duration_seconds,
-                       created_at, updated_at
-                FROM mbc_gym_workouts
-                WHERE user_id = ?
-                ORDER BY (ended_at IS NULL) DESC, started_at DESC
+        // Aktive Sessions zuerst (ended_at IS NULL), dann nach started_at DESC.
+        // plan_day_split + set_muscles speisen das Split-Segment der History:
+        // der Client nimmt den Plan-Split, sonst leitet er aus den Muskeln ab.
+        $sql = 'SELECT w.workouts_id, w.user_id, w.plan_day_id, w.started_at, w.ended_at, w.name,
+                       w.notes, w.body_weight_kg, w.total_volume_kg, w.duration_seconds,
+                       w.created_at, w.updated_at,
+                       pd.split AS plan_day_split,
+                       (SELECT GROUP_CONCAT(DISTINCT e.primary_muscle)
+                          FROM mbc_gym_workout_sets s
+                          INNER JOIN mbc_gym_exercises e ON e.exercises_id = s.exercise_id
+                         WHERE s.workout_id = w.workouts_id
+                           AND s.is_warmup = 0
+                           AND e.primary_muscle IS NOT NULL AND e.primary_muscle <> \'\'
+                       ) AS set_muscles
+                FROM mbc_gym_workouts w
+                LEFT JOIN mbc_gym_plan_days pd ON pd.plan_days_id = w.plan_day_id
+                WHERE w.user_id = ?
+                ORDER BY (w.ended_at IS NULL) DESC, w.started_at DESC
                 LIMIT ' . $limit . ' OFFSET ' . $offset;
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute([$userId]);
@@ -52,11 +63,20 @@ class requestGetGymWorkouts extends RequestBase {
 
     private function getDetail(int $userId, int $workoutId): void {
         $stmt = $this->pdo->prepare(
-            'SELECT workouts_id, user_id, plan_day_id, started_at, ended_at, name,
-                    notes, body_weight_kg, total_volume_kg, duration_seconds,
-                    created_at, updated_at
-             FROM mbc_gym_workouts
-             WHERE workouts_id = ? AND user_id = ?
+            'SELECT w.workouts_id, w.user_id, w.plan_day_id, w.started_at, w.ended_at, w.name,
+                    w.notes, w.body_weight_kg, w.total_volume_kg, w.duration_seconds,
+                    w.created_at, w.updated_at,
+                    pd.split AS plan_day_split,
+                    (SELECT GROUP_CONCAT(DISTINCT e.primary_muscle)
+                       FROM mbc_gym_workout_sets s
+                       INNER JOIN mbc_gym_exercises e ON e.exercises_id = s.exercise_id
+                      WHERE s.workout_id = w.workouts_id
+                        AND s.is_warmup = 0
+                        AND e.primary_muscle IS NOT NULL AND e.primary_muscle <> \'\'
+                    ) AS set_muscles
+             FROM mbc_gym_workouts w
+             LEFT JOIN mbc_gym_plan_days pd ON pd.plan_days_id = w.plan_day_id
+             WHERE w.workouts_id = ? AND w.user_id = ?
              LIMIT 1'
         );
         $stmt->execute([$workoutId, $userId]);

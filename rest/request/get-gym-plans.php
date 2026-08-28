@@ -64,7 +64,7 @@ class requestGetGymPlans extends RequestBase {
         }
 
         $stmt = $this->pdo->prepare(
-            'SELECT plan_days_id, user_id, plan_id, day_index, name, notes, created_at, updated_at
+            'SELECT plan_days_id, user_id, plan_id, day_index, name, split, notes, created_at, updated_at
              FROM mbc_gym_plan_days
              WHERE plan_id = ? AND user_id = ?
              ORDER BY day_index ASC'

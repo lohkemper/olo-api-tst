@@ -4,7 +4,7 @@ declare(strict_types=1);
 if (!STOKEN) die('SEC');
 
 /**
- * PUT /gym/plan-days/{id} — Aktualisiert Name/Index/Notes eines Plan-Tages.
+ * PUT /gym/plan-days/{id} — Aktualisiert Name/Index/Split/Notes eines Plan-Tages.
  */
 class requestPutGymPlanDays extends RequestBase {
     private array $request = [];
@@ -27,7 +27,7 @@ class requestPutGymPlanDays extends RequestBase {
                 return;
             }
 
-            $allowed = ['name','day_index','notes'];
+            $allowed = ['name','day_index','split','notes'];
             $sets = [];
             $params = [];
             foreach ($allowed as $f) {
@@ -56,7 +56,7 @@ class requestPutGymPlanDays extends RequestBase {
             }
 
             $stmt = $this->pdo->prepare(
-                'SELECT plan_days_id, user_id, plan_id, day_index, name, notes,
+                'SELECT plan_days_id, user_id, plan_id, day_index, name, split, notes,
                         created_at, updated_at
                  FROM mbc_gym_plan_days WHERE plan_days_id = ?'
             );

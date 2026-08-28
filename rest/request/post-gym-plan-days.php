@@ -48,21 +48,26 @@ class requestPostGymPlanDays extends RequestBase {
                 $dayIndex = (int)$stmt->fetch(PDO::FETCH_ASSOC)['next_idx'];
             }
 
+            // Split optional: push | pull | legs | upper | lower | full
+            $split = isset($this->data['split']) && $this->data['split'] !== ''
+                ? (string)$this->data['split'] : null;
+
             $stmt = $this->pdo->prepare(
-                'INSERT INTO mbc_gym_plan_days (user_id, plan_id, day_index, name, notes)
-                 VALUES (?, ?, ?, ?, ?)'
+                'INSERT INTO mbc_gym_plan_days (user_id, plan_id, day_index, name, split, notes)
+                 VALUES (?, ?, ?, ?, ?, ?)'
             );
             $stmt->execute([
                 $userId,
                 $planId,
                 (int)$dayIndex,
                 $name,
+                $split,
                 $this->data['notes'] ?? null,
             ]);
 
             $newId = (int)$this->pdo->lastInsertId();
             $stmt = $this->pdo->prepare(
-                'SELECT plan_days_id, user_id, plan_id, day_index, name, notes,
+                'SELECT plan_days_id, user_id, plan_id, day_index, name, split, notes,
                         created_at, updated_at
                  FROM mbc_gym_plan_days WHERE plan_days_id = ?'
             );
