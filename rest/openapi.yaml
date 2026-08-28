@@ -1217,18 +1217,23 @@ paths:
                   type: string
       responses:
         '201':
-          description: User erfolgreich registriert
+          description: User erfolgreich registriert (Session wird direkt ausgestellt)
+          headers:
+            Set-Cookie:
+              description: JWT Token (HttpOnly, Secure)
+              schema:
+                type: string
+                example: jwt_token=eyJ0eXAiOiJKV1Q...; Path=/; HttpOnly; Secure; SameSite=None
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  success:
-                    type: boolean
-                  message:
-                    type: string
                   user:
                     $ref: '#/components/schemas/User'
+                  csrfToken:
+                    type: string
+                    description: CSRF-Token für nachfolgende Requests
         '400':
           description: Validierungsfehler
 

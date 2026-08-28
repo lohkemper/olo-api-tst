@@ -74,35 +74,14 @@ class requestPostRegister extends RequestBase {
             // Assign default "user" role
             $this->assignDefaultRole($userId);
 
-            // Fetch created user with roles
+            // Fetch created user
             $user = $this->getUserById($userId);
 
-            // Generate JWT token
-            $token = $this->generateJwtToken($user);
-
-            // Start session for CSRF token
-            if (session_status() === PHP_SESSION_NONE) {
-                session_start();
-            }
-
-            // Generate CSRF token
-            $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-
-            // Response
-            $response = [
-                'user' => [
-                    'id' => (int)$user['users_id'],
-                    'email' => $user['email'],
-                    'username' => $user['username'],
-                    'firstName' => $user['first_name'] ?? '',
-                    'lastName' => $user['last_name'] ?? '',
-                    'isActive' => (bool)($user['is_active'] ?? true),
-                    'roles' => $user['roles'],
-                    'permissions' => $user['permissions']
-                ],
-                'accessToken' => $token,
-                'csrfToken' => $_SESSION['csrf_token']
-            ];
+            // Session ausstellen (JWT-Cookie + CSRF) — zentral in JwtSession,
+            // Antwort im Login-Format { user, csrfToken }. Vorher stand das JWT
+            // nur im Body (nie im Cookie): der Neuzugang war faktisch nicht
+            // eingeloggt, jetzt ist er es.
+            $response = JwtSession::issue($this->pdo, $user);
 
             http_response_code(201);
             header('Content-Type: application/json');
@@ -222,7 +201,7 @@ class requestPostRegister extends RequestBase {
     }
 
     /**
-     * Get user by ID with roles and permissions
+     * Get user by ID (Rollen/Permissions lädt JwtSession selbst)
      */
     private function getUserById(int $userId): array {
         $stmt = $this->pdo->prepare("
@@ -245,140 +224,6 @@ class requestPostRegister extends RequestBase {
             throw new \RuntimeException('User not found after registration');
         }
 
-        // Load roles with error tolerance
-        try {
-            $user['roles'] = $this->getUserRoles($userId);
-        } catch (\PDOException $e) {
-            error_log("Failed to load user roles: " . $e->getMessage());
-            $user['roles'] = [];
-        }
-
-        // Load permissions with error tolerance
-        try {
-            $user['permissions'] = $this->getUserPermissions($userId);
-        } catch (\PDOException $e) {
-            error_log("Failed to load user permissions: " . $e->getMessage());
-            $user['permissions'] = [];
-        }
-
         return $user;
-    }
-
-    /**
-     * Get user roles with permissions
-     */
-    private function getUserRoles(int $userId): array {
-        $stmt = $this->pdo->prepare("
-            SELECT
-                r.roles_id,
-                r.name,
-                r.display_name,
-                r.description
-            FROM " . PREFIX . "_roles r
-            INNER JOIN " . PREFIX . "_user_roles ur ON r.roles_id = ur.role_id
-            WHERE ur.user_id = :userId
-        ");
-
-        $stmt->execute(['userId' => $userId]);
-        $roles = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-        foreach ($roles as &$role) {
-            $role['roles_id'] = (int)$role['roles_id'];
-            $role['permissions'] = $this->getRolePermissions((int)$role['roles_id']);
-        }
-
-        return $roles;
-    }
-
-    /**
-     * Get role permissions
-     */
-    private function getRolePermissions(int $roleId): array {
-        $stmt = $this->pdo->prepare("
-            SELECT
-                p.permissions_id,
-                p.name,
-                p.resource,
-                p.action,
-                p.scope,
-                p.description
-            FROM " . PREFIX . "_permissions p
-            INNER JOIN " . PREFIX . "_role_permissions rp ON p.permissions_id = rp.permission_id
-            WHERE rp.role_id = :roleId
-        ");
-
-        $stmt->execute(['roleId' => $roleId]);
-        $permissions = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-        return array_map(function($permission) {
-            return [
-                'id' => (int)$permission['permissions_id'],
-                'name' => $permission['name'],
-                'resource' => $permission['resource'],
-                'action' => $permission['action'],
-                'scope' => $permission['scope'],
-                'description' => $permission['description'] ?? ''
-            ];
-        }, $permissions);
-    }
-
-    /**
-     * Get user-specific permissions
-     */
-    private function getUserPermissions(int $userId): array {
-        $stmt = $this->pdo->prepare("
-            SELECT
-                p.permissions_id,
-                p.name,
-                p.resource,
-                p.action,
-                p.scope,
-                p.description
-            FROM " . PREFIX . "_permissions p
-            INNER JOIN " . PREFIX . "_user_permissions up ON p.permissions_id = up.permission_id
-            WHERE up.user_id = :userId
-            AND (up.expires_at IS NULL OR up.expires_at > NOW())
-        ");
-
-        $stmt->execute(['userId' => $userId]);
-        $permissions = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-        return array_map(function($permission) {
-            return [
-                'id' => (int)$permission['permissions_id'],
-                'name' => $permission['name'],
-                'resource' => $permission['resource'],
-                'action' => $permission['action'],
-                'scope' => $permission['scope'],
-                'description' => $permission['description'] ?? ''
-            ];
-        }, $permissions);
-    }
-
-    /**
-     * Generate JWT token
-     */
-    private function generateJwtToken(array $user): string {
-        $header = json_encode([
-            'typ' => 'JWT',
-            'alg' => 'HS256'
-        ]);
-
-        $payload = json_encode([
-            'userId' => $user['users_id'],
-            'username' => $user['username'],
-            'email' => $user['email'],
-            'iat' => time(),
-            'exp' => time() + (60 * 60 * 24) // 24 hours
-        ]);
-
-        $base64UrlHeader = str_replace(['+', '/', '='], ['-', '_', ''], base64_encode($header));
-        $base64UrlPayload = str_replace(['+', '/', '='], ['-', '_', ''], base64_encode($payload));
-
-        $secretKey = $_ENV['JWT_SECRET'] ?? 'your-secret-key-change-in-production';
-        $signature = hash_hmac('sha256', $base64UrlHeader . "." . $base64UrlPayload, $secretKey, true);
-        $base64UrlSignature = str_replace(['+', '/', '='], ['-', '_', ''], base64_encode($signature));
-
-        return $base64UrlHeader . "." . $base64UrlPayload . "." . $base64UrlSignature;
     }
 }

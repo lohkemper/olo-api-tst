@@ -4,14 +4,13 @@ declare(strict_types=1);
 if (!STOKEN) die('SEC');
 
 /**
- * Gemeinsamer Session-Aussteller für die Social-Login-Endpoints.
+ * Der EINZIGE Session-Aussteller: JWT erzeugen (firebase/php-jwt), HttpOnly-
+ * Cookie setzen (korrekte $isSecure ? 'None' : 'Lax'-Logik), CSRF-Token
+ * erzeugen und das camelCase-Wire-Format der /auth/login-Antwort bauen.
  *
- * Bündelt: JWT erzeugen (firebase/php-jwt, wie post-login), HttpOnly-Cookie
- * setzen (korrekte $isSecure ? 'None' : 'Lax'-Logik), CSRF-Token erzeugen und
- * das camelCase-Wire-Format der /auth/login-Antwort bauen.
- *
- * Die bestehenden Implementierungen in post-login/post-register/post-auth
- * bleiben bewusst unangetastet (Follow-up: Vereinheitlichung auf diesen Helper).
+ * Nutzer: post-login, post-register, post-auth (refresh), post-mfa-verify,
+ * get-social-callback, post-social-link, post-social-complete. Token-Payload,
+ * Laufzeit oder Cookie-Flags NUR hier ändern — keine lokalen Kopien anlegen.
  */
 final class JwtSession {
 

@@ -56,31 +56,9 @@ class requestPostAuth extends RequestBase {
         // Require authentication
         $user = $this->requireAuth();
 
-        // Generate new JWT token
-        $newToken = $this->generateJwtToken($user);
-
-        // Set JWT as HttpOnly Cookie for security
-        $this->setJwtCookie($newToken);
-
-        // Start session if not already started
-        if (session_status() === PHP_SESSION_NONE) {
-            session_start();
-        }
-
-        // Generate new CSRF token
-        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-
-        // Response (without accessToken in body - it's now in cookie)
-        $response = [
-            'csrfToken' => $_SESSION['csrf_token'],
-            'user' => [
-                'id' => (int)($user['users_id'] ?? $user['id'] ?? 0),
-                'email' => $user['email'],
-                'username' => $user['username'],
-                'bio' => $user['bio'] ?? '',
-                'image' => $user['image'] ?? ''
-            ]
-        ];
+        // Session neu ausstellen (frisches JWT-Cookie + CSRF) — zentral in
+        // JwtSession; Antwort im Login-Format { user, csrfToken }.
+        $response = JwtSession::issue($this->pdo, $user);
 
         http_response_code(200);
         header('Content-Type: application/json');
@@ -140,57 +118,4 @@ class requestPostAuth extends RequestBase {
         echo json_encode(['success' => true]);
     }
 
-    /**
-     * Generate JWT token for user
-     * Simplified version - in production use a proper JWT library
-     */
-    private function generateJwtToken(array $user): string {
-        $header = json_encode([
-            'typ' => 'JWT',
-            'alg' => 'HS256'
-        ]);
-
-        $payload = json_encode([
-            'userId' => $user['users_id'] ?? $user['id'] ?? null,
-            'username' => $user['username'],
-            'email' => $user['email'],
-            'iat' => time(),
-            'exp' => time() + (60 * 60 * 24) // 24 hours
-        ]);
-
-        // Base64 encode
-        $base64UrlHeader = str_replace(['+', '/', '='], ['-', '_', ''], base64_encode($header));
-        $base64UrlPayload = str_replace(['+', '/', '='], ['-', '_', ''], base64_encode($payload));
-
-        // Create signature
-        $secretKey = $_ENV['JWT_SECRET'] ?? 'your-secret-key-change-in-production';
-        $signature = hash_hmac('sha256', $base64UrlHeader . "." . $base64UrlPayload, $secretKey, true);
-        $base64UrlSignature = str_replace(['+', '/', '='], ['-', '_', ''], base64_encode($signature));
-
-        // Create JWT
-        return $base64UrlHeader . "." . $base64UrlPayload . "." . $base64UrlSignature;
-    }
-
-    /**
-     * Set JWT token as HttpOnly Cookie
-     * Provides XSS protection by making token inaccessible to JavaScript
-     */
-    private function setJwtCookie(string $token): void {
-        // Determine if we're in a secure context (HTTPS)
-        $isSecure = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on')
-                    || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
-
-        setcookie(
-            'jwt_token',                              // Cookie name
-            $token,                                   // JWT token value
-            [
-                'expires' => time() + (60 * 60 * 24), // 24 hours (same as JWT exp)
-                'path' => '/',                        // Available across entire domain
-                'domain' => '',                       // Current domain
-                'secure' => $isSecure,                // Only over HTTPS in production
-                'httponly' => true,                   // Not accessible via JavaScript (XSS protection)
-                'samesite' => 'None'                  // Allow cross-site requests (needed for localhost development)
-            ]
-        );
-    }
 }
