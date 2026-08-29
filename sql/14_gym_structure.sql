@@ -6,7 +6,6 @@
 -- ============================================================================
 
 
--- >>> aus: 25_gym-schema.sql [struct-Teil] ------------------------------------------------------------
 -- ============================================================================
 -- MBC Gym Module - Database Schema (Phase 0 — Catalog Foundation)
 -- ============================================================================
@@ -151,14 +150,13 @@ ON DUPLICATE KEY UPDATE
 -- ============================================================================
 
 
--- >>> aus: 27_gym_workouts.sql [struct-Teil] ------------------------------------------------------------
 -- ============================================================================
 -- MBC Gym Module - Workouts + Sets (Phase 1 — MVP)
 -- ============================================================================
 -- Version: 0.2.0
 -- Erstellt: 2026-05-03
 -- Beschreibung: Workout-Sessions und einzelne Sets als Foundation für
---               Live-Tracking. Setzt 25_gym-schema.sql voraus.
+--               Live-Tracking. Setzt das Gym-Grundschema (weiter oben in dieser Datei) voraus.
 -- ============================================================================
 
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
@@ -304,7 +302,6 @@ ON DUPLICATE KEY UPDATE
 -- ============================================================================
 
 
--- >>> aus: 28_gym_plans_records.sql [struct-Teil] ------------------------------------------------------------
 -- ============================================================================
 -- MBC Gym Module - Plans + Personal Records (Phase 2)
 -- ============================================================================
@@ -547,7 +544,6 @@ ON DUPLICATE KEY UPDATE
   description = 'Phase 2 — Plans + Personal Records';
 
 
--- >>> aus: 29_gym_body.sql [struct-Teil] ------------------------------------------------------------
 -- ============================================================================
 -- MBC Gym Module - Body-Tracking (Phase 3)
 -- ============================================================================
@@ -632,7 +628,6 @@ ON DUPLICATE KEY UPDATE
   description = 'Phase 3 — Body-Measurements + Analytics-Permissions';
 
 
--- >>> aus: 30_gym_cardio_nutrition.sql [struct-Teil] ------------------------------------------------------------
 -- ============================================================================
 -- MBC Gym Module - Cardio + Nutrition (Phase 5)
 -- ============================================================================
@@ -800,7 +795,6 @@ ON DUPLICATE KEY UPDATE
   description = 'Phase 5 — Cardio + Nutrition';
 
 
--- >>> aus: 31_gym_phase4.sql [struct-Teil] ------------------------------------------------------------
 -- ============================================================================
 -- MBC Gym Module - Equipment-Link + Coach-Rolle (Phase 4)
 -- ============================================================================
@@ -819,7 +813,7 @@ SET time_zone = "+00:00";
 -- FK von mbc_gym_exercises.equipment_article_id auf mbc_warehouse_items.items_id
 -- mbc_warehouse_items.items_id ist INT UNSIGNED — die referenzierende Spalte
 -- MUSS exakt matchen, sonst MariaDB/MySQL-Fehler 1005 (errno 150). Frühere
--- Versionen von 25_gym-schema.sql legten die Spalte fälschlich als signed INT
+-- Versionen des Gym-Grundschemas legten die Spalte fälschlich als signed INT
 -- an; das MODIFY unten repariert solche Bestands-Installs idempotent.
 -- Idempotent durch DROP IF EXISTS davor.
 -- ============================================================================
@@ -903,9 +897,7 @@ CREATE TABLE IF NOT EXISTS mbc_gym_plan_assignments (
 COMMIT;
 
 
--- >>> aus: 48_gym_primary_muscles.sql ----------------------------------------------------------------
 -- =====================================================================
--- 48_gym_primary_muscles.sql
 -- Gym — mehrere Primärmuskeln pro Übung
 --
 -- Bisher hielt `primary_muscle VARCHAR(40)` genau einen Muskel. Die neue

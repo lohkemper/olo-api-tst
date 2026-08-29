@@ -6,7 +6,6 @@
 -- ============================================================================
 
 
--- >>> aus: 14_warehouse-schema.sql ------------------------------------------------------------
 -- ============================================================================
 -- MBC Warehouse Module - Database Schema
 -- ============================================================================
@@ -360,7 +359,6 @@ ON DUPLICATE KEY UPDATE
 -- ============================================================================
 
 
--- >>> aus: 18_migrate_warehaouse_to_warehouse.sql ------------------------------------------------------------
 -- ============================================================================
 -- MBC Warehouse Module - Migration: Rename "warehouse" to "warehouse"
 -- ============================================================================
@@ -608,7 +606,6 @@ WHERE NOT EXISTS (
 -- 4. Bei Problemen: Restore aus Backup
 
 
--- >>> aus: 20_warehouse_locations_dimensions.sql ------------------------------------------------------------
 -- ============================================================================
 -- MBC Warehouse - Locations: Maße + Grid (Zeilen/Spalten)
 -- ============================================================================
@@ -619,7 +616,7 @@ WHERE NOT EXISTS (
 --     depth_cm              : Außenmaße (Breite × Höhe × Tiefe in cm)
 --
 -- Idempotent: Spalten-Adds sind via INFORMATION_SCHEMA-Check abgesichert.
--- Voraussetzung: 14_warehouse-schema.sql ausgeführt.
+-- Voraussetzung: Warehouse-Grundschema (weiter oben in dieser Datei) ausgeführt.
 -- ============================================================================
 
 START TRANSACTION;
@@ -629,7 +626,7 @@ START TRANSACTION;
 -- ---------------------------------------------------------------------------
 
 -- Hinweis: PREFIX-Abstraktion ist PHP-seitig; in SQL gehen wir vom konkreten
--- Tabellennamen aus, der bereits in 14_warehouse-schema.sql verwendet wird.
+-- Tabellennamen aus, der bereits im Warehouse-Grundschema verwendet wird.
 SET @schema := DATABASE();
 SET @tbl    := 'mbc_warehouse_locations';
 
@@ -701,7 +698,6 @@ ON DUPLICATE KEY UPDATE
 COMMIT;
 
 
--- >>> aus: 23_warehouse_typo_trigger_cleanup.sql ------------------------------------------------------------
 -- ============================================================================
 -- MBC Warehouse - Trigger/Proc/View-Cleanup nach typo-Renames
 -- ============================================================================
@@ -723,7 +719,7 @@ COMMIT;
 --
 -- Idempotent: alle DROPs nutzen IF EXISTS, alle CREATEs überschreiben sich.
 -- Voraussetzung: Tabelle `mbc_warehouse_locations` existiert (sie tut's auf
--- Prod laut Diagnose; Spalten via 20_warehouse_locations_dimensions.sql).
+-- Prod laut Diagnose; Maße/Grid-Spalten siehe Dimensions-Abschnitt weiter oben).
 -- WICHTIG: Vor Ausführung Backup empfohlen.
 -- ============================================================================
 
@@ -899,7 +895,6 @@ ON DUPLICATE KEY UPDATE
 --   SHOW CREATE TRIGGER trg_warehouse_location_before_update\G
 
 
--- >>> aus: 24_warehouse_items_grid_position.sql ------------------------------------------------------------
 -- ============================================================================
 -- MBC Warehouse - Items: Position im Bereiche-Raster (Zeile / Spalte)
 -- ============================================================================
@@ -913,7 +908,7 @@ ON DUPLICATE KEY UPDATE
 -- oder die Position noch nicht festgelegt wurde).
 --
 -- Idempotent: Spalten-Adds sind via INFORMATION_SCHEMA-Check abgesichert.
--- Voraussetzung: 14_warehouse-schema.sql + 20_warehouse_locations_dimensions.sql
+-- Voraussetzung: Warehouse-Grundschema + Dimensions-Abschnitt (beide weiter oben)
 -- bereits ausgeführt.
 -- ============================================================================
 
@@ -954,7 +949,6 @@ ON DUPLICATE KEY UPDATE
   description = 'Items: grid_row, grid_col für Position im Lagerplatz-Raster';
 
 
--- >>> aus: 38_warehouse_packlists.sql [struct-Teil: Tabellen] ------------------------------------------------------------
 -- ============================================================================
 -- MBC Warehouse Module - Packliste + Verleihservice
 -- ============================================================================
@@ -969,10 +963,10 @@ ON DUPLICATE KEY UPDATE
 --   mbc_warehouse_items.quantity (physischer Bestand) wird NIE verändert.
 --
 -- Signedness: mbc_warehouse_items.items_id / mbc_warehouse_locations.locations_id /
---   mbc_users.users_id sind INT UNSIGNED (vgl. 31_gym_phase4.sql). Alle FK-Spalten
+--   mbc_users.users_id sind INT UNSIGNED. Alle FK-Spalten
 --   hier MÜSSEN exakt matchen, sonst MariaDB/MySQL-Fehler 1005 (errno 150).
 --
--- Voraussetzung: 14_warehouse-schema.sql, 00_create_users_table.sql
+-- Voraussetzung: Warehouse-Grundschema (weiter oben), 01_core_structure.sql
 -- ============================================================================
 
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
@@ -1267,7 +1261,7 @@ ON DUPLICATE KEY UPDATE
 -- Signedness: items_id / locations_id / users_id sind auf Prod INT UNSIGNED —
 --   alle FK-Spalten hier MÜSSEN exakt matchen, sonst Fehler 1005 (errno 150).
 --
--- Voraussetzung: Warehouse-Grundschema (Items + Locations), 00_create_users_table.sql
+-- Voraussetzung: Warehouse-Grundschema (Items + Locations), 01_core_structure.sql
 -- ============================================================================
 
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";

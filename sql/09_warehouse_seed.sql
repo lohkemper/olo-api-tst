@@ -6,7 +6,6 @@
 -- ============================================================================
 
 
--- >>> aus: 15_seed_warehouse_permissions.sql ------------------------------------------------------------
 -- ============================================================================
 -- MBC Warehouse Module - Permissions & Navigation Seed
 -- ============================================================================
@@ -341,7 +340,6 @@ ON DUPLICATE KEY UPDATE
 -- ============================================================================
 
 
--- >>> aus: 36_navigation_warehouse_consolidation.sql ------------------------------------------------------------
 -- ============================================================================
 -- MBC Navigation - Warehouse-Konsolidierung
 -- ============================================================================
@@ -358,7 +356,7 @@ ON DUPLICATE KEY UPDATE
 -- vereinte Seite.
 --
 -- Idempotent: route-basierte UPDATEs sind safe re-runnable. Transaction-gekapselt.
--- Voraussetzung: 15_seed_warehouse_permissions.sql (Seed der Nav-Einträge).
+-- Voraussetzung: Warehouse-Permissions-Seed weiter oben in dieser Datei (Nav-Einträge).
 -- ============================================================================
 
 START TRANSACTION;
@@ -418,7 +416,6 @@ COMMIT;
 -- ============================================================================
 
 
--- >>> aus: 37_warehouse_items_seed.sql ------------------------------------------------------------
 -- ============================================================================
 -- MBC Warehouse - Items-Seed (Produktdaten + Lagerplätze)
 -- ============================================================================
@@ -440,7 +437,7 @@ COMMIT;
 --
 -- Idempotent: Re-Run fügt nichts doppelt ein. Helfer-Prozeduren werden am
 --   Ende wieder entfernt, damit die DB sauber bleibt.
--- Voraussetzung: 14_warehouse-schema.sql, 20_..., 24_..., 23_... ausgeführt.
+-- Voraussetzung: 08_warehouse_structure.sql vollständig ausgeführt.
 -- ============================================================================
 
 -- ---------------------------------------------------------------------------
@@ -1142,8 +1139,7 @@ ON DUPLICATE KEY UPDATE
 -- ============================================================================
 
 
--- >>> aus: 38_warehouse_packlists.sql [seed-Teil: Permissions/Nav] ------------------------------------------------------------
--- (seed-Teil aus 38_warehouse_packlists.sql)
+-- Packlisten: Permissions + Navigation
 START TRANSACTION;
 INSERT IGNORE INTO `mbc_permissions` (`name`, `resource`, `action`, `scope`, `description`) VALUES
 -- Packlisten-Vorlagen
@@ -1214,7 +1210,6 @@ AND r.name IN ('user', 'moderator', 'admin', 'super_admin');
 COMMIT;
 
 
--- >>> aus: 39_warehouse_nav_stock.sql ------------------------------------------------------------
 -- ============================================================================
 -- MBC Navigation - Warehouse "Bestand"-Sub-Eintrag + Icon-Korrektur
 -- ============================================================================
@@ -1232,14 +1227,14 @@ COMMIT;
 --   sort 1) als erster Menüpunkt, damit die Stock-Ansicht per Menü erreichbar
 --   bleibt.
 --
---   Zusätzlich: die in 38 gesetzten Icon-Namen 'list_alt'/'content_copy' sind
+--   Zusätzlich: die zuvor gesetzten Icon-Namen 'list_alt'/'content_copy' sind
 --   NICHT im Frontend-ICON_MAP (projects/ui/src/lib/icon/icon-map.ts) und
 --   rendern damit kein Icon. Auf gemappte Aliase 'list' bzw. 'category'
 --   korrigiert.
 --
 -- Idempotent: NOT-EXISTS-Insert + route-basierte UPDATEs (safe re-runnable),
 --   transaction-gekapselt.
--- Voraussetzung: 36_navigation_warehouse_consolidation.sql, 38_warehouse_packlists.sql
+-- Voraussetzung: Nav-Konsolidierung + Packlisten-Seed weiter oben in dieser Datei
 -- ============================================================================
 
 START TRANSACTION;

@@ -6,7 +6,6 @@
 -- ============================================================================
 
 
--- >>> aus: 06_seed_roles_and_permissions.sql ------------------------------------------------------------
 -- ======================================================================
 -- Seed-Daten: Rollen und Permissions
 -- Beschreibung: Fügt Standard-Rollen und Permissions in das System ein

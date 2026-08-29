@@ -6,7 +6,6 @@
 -- ============================================================================
 
 
--- >>> aus: 09_insert_navigation_roles.sql ------------------------------------------------------------
 -- ======================================================================
 -- Inserts: mbc_navigation_roles
 -- Beschreibung: Beispiel-Zuweisungen von Rollen zu Navigationseinträgen
@@ -42,7 +41,6 @@
 -- ======================================================================
 
 
--- >>> aus: 10_insert_navigation_permissions.sql ------------------------------------------------------------
 -- ======================================================================
 -- Inserts: Navigation Permissions
 -- Beschreibung: Fügt navigation.manage Permission in das System ein
@@ -97,7 +95,6 @@ WHERE r.name = 'super_admin' AND p.name IN (
 -- );
 
 
--- >>> aus: 19_navigation_cleanup.sql ------------------------------------------------------------
 -- ============================================================================
 -- MBC Navigation - Pre-Flight Cleanup
 -- ============================================================================
@@ -111,7 +108,7 @@ WHERE r.name = 'super_admin' AND p.name IN (
 --   4. sort_order-Harmonisierung Lager-Children (id 37: 4 → 60)
 --
 -- Idempotent: UPDATEs sind safe re-runnable. Transaction-gekapselt.
--- Voraussetzung: 07_create_navigation_table.sql ausgeführt + Seed-Daten vorhanden.
+-- Voraussetzung: 03_navigation_structure.sql ausgeführt + Seed-Daten vorhanden.
 -- ============================================================================
 
 START TRANSACTION;
@@ -203,7 +200,6 @@ COMMIT;
 -- ============================================================================
 
 
--- >>> aus: 21_navigation_logs_reactivate.sql ------------------------------------------------------------
 -- ============================================================================
 -- MBC Navigation - Logs Route reaktivieren
 -- ============================================================================
@@ -214,7 +210,7 @@ COMMIT;
 -- in src/app/app.routes.ts implementiert wurde (LogsViewerComponent).
 --
 -- Voraussetzung:
---   - 19_navigation_cleanup.sql bereits ausgeführt (parent_id 27, is_active 0)
+--   - Navigation-Cleanup weiter oben in dieser Datei bereits ausgeführt (parent_id 27, is_active 0)
 --   - app.routes.ts enthält Eintrag 'admin/logs' → LogsViewerComponent
 -- ============================================================================
 
@@ -239,7 +235,6 @@ COMMIT;
 --   → erwartet: route=/admin/logs, is_active=1, parent_id=27
 
 
--- >>> aus: 22_navigation_statistics_reactivate.sql ------------------------------------------------------------
 -- ============================================================================
 -- MBC Navigation - Lager-Statistiken Route reaktivieren
 -- ============================================================================
@@ -251,7 +246,7 @@ COMMIT;
 -- (StatisticsHomeComponent mit Dashboard-Layout).
 --
 -- Voraussetzung:
---   - 19_navigation_cleanup.sql bereits ausgeführt
+--   - Navigation-Cleanup weiter oben in dieser Datei bereits ausgeführt
 --     (Tipfehler /warehaouse/ → /warehouse/, sort_order 4 → 60, is_active 0)
 --   - WAREHOUSE_ROUTES enthält Eintrag 'statistics' → StatisticsHomeComponent
 -- ============================================================================
@@ -277,8 +272,7 @@ COMMIT;
 --   → erwartet: route=/warehouse/statistics, is_active=1, sort_order=60
 
 
--- >>> aus: 24_navigation_description.sql [seed-Teil: UPDATEs] ------------------------------------------------------------
--- (seed-Teil aus 24_navigation_description.sql)
+-- Mega-Menü-Beschreibungen: Lager-Sub-Einträge
 START TRANSACTION;
 -- 2) Lager-Sub-Einträge mit Beschreibungen versehen (Parent id 33).
 --    IDs aus dem Live-Bestand; route zur Absicherung gegen ID-Drift.
@@ -302,7 +296,6 @@ WHERE `navigations_id` = 66 AND `route` = '/warehouse/templates';
 COMMIT;
 
 
--- >>> aus: 25_navigation_descriptions_mega.sql ------------------------------------------------------------
 -- ============================================================================
 -- MBC Navigation - Mega-Menü-Sub-Texte für Admin / E-Mail / IoT / Gym
 -- ============================================================================
@@ -313,7 +306,7 @@ COMMIT;
 -- Kinder der übrigen Mega-Parents. Texte weitgehend aus dem Handoff-Prototyp;
 -- fehlende (Permissions/Rollen/Gesendet) sinngemäß ergänzt.
 --
--- Voraussetzung: 24_navigation_description.sql (legt die Spalte an).
+-- Voraussetzung: 03_navigation_structure.sql (legt die description-Spalte an).
 -- Idempotent: reine UPDATEs, per navigations_id + route abgesichert.
 -- Inaktive Einträge (Berichte id 3, Content-Baum) bewusst ausgelassen.
 -- ============================================================================
@@ -376,7 +369,6 @@ ON DUPLICATE KEY UPDATE
 COMMIT;
 
 
--- >>> aus: 26_navigation_icon_iot_devices.sql ------------------------------------------------------------
 -- ============================================================================
 -- MBC Navigation - Icon für /iot/devices
 -- ============================================================================

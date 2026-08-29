@@ -6,9 +6,7 @@
 -- ============================================================================
 
 
--- >>> aus: 33_grow-schema.sql ------------------------------------------------------------
 -- =====================================================================
--- 33_grow-schema.sql
 -- Modul "Grow" — Pflanzen-Aufzucht von Aussaat bis Ernte
 --
 -- FK-Typ-Konvention (MariaDB errno 1005/150 vermeiden — exakte Typ-Matches).
@@ -248,16 +246,14 @@ CREATE TABLE IF NOT EXISTS `mbc_user_settings` (
   COMMENT='Pro-User-Einstellungen inkl. Google-Kalender-OAuth';
 
 
--- >>> aus: 40_grow_preparation_fields.sql ------------------------------------------------------------
 -- =====================================================================
--- 40_grow_preparation_fields.sql
 -- Grow — Präparate-Katalog um Handoff-Felder erweitern
 --
 -- Ergänzt mbc_grow_preparations um: status, color, default_dosage, phase,
 -- ec_contribution, brand, notes. Ermöglicht die hi-fi „Präparate"-Seite
 -- (Master/Detail) aus dem Design-Handoff.
 --
--- Voraussetzung: 33_grow-schema.sql.
+-- Voraussetzung: Grow-Grundschema (weiter oben in dieser Datei).
 -- Idempotent: ADD COLUMN IF NOT EXISTS (MariaDB 10.0+).
 -- =====================================================================
 

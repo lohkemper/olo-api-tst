@@ -6,7 +6,6 @@
 -- ============================================================================
 
 
--- >>> aus: 00_create_users_table.sql ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `mbc_users` (
   `users_id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `username` VARCHAR(255) NOT NULL UNIQUE,
@@ -26,7 +25,6 @@ CREATE TABLE IF NOT EXISTS `mbc_users` (
 COMMENT='Benutzer-Stammdaten';
 
 
--- >>> aus: 01_create_roles_table.sql ------------------------------------------------------------
 -- ======================================================================
 -- Tabelle: mbc_roles
 -- Beschreibung: Speichert alle Rollen im System (user, moderator, admin, etc.)
@@ -44,7 +42,6 @@ CREATE TABLE IF NOT EXISTS `mbc_roles` (
 COMMENT='Rollen-Tabelle für RBAC-System';
 
 
--- >>> aus: 02_create_permissions_table.sql ------------------------------------------------------------
 -- ======================================================================
 -- Tabelle: mbc_permissions
 -- Beschreibung: Speichert alle Permissions/Berechtigungen im System
@@ -64,7 +61,6 @@ CREATE TABLE IF NOT EXISTS `mbc_permissions` (
 COMMENT='Permissions-Tabelle für RBAC/PBAC-System';
 
 
--- >>> aus: 03_create_user_roles_table.sql ------------------------------------------------------------
 -- ======================================================================
 -- Tabelle: mbc_user_roles
 -- Beschreibung: Many-to-Many Beziehung zwischen Users und Rollen
@@ -91,7 +87,6 @@ CREATE TABLE IF NOT EXISTS `mbc_user_roles` (
 COMMENT='User-Rollen-Zuweisungen (Many-to-Many)';
 
 
--- >>> aus: 04_create_role_permissions_table.sql ------------------------------------------------------------
 -- ======================================================================
 -- Tabelle: mbc_role_permissions
 -- Beschreibung: Many-to-Many Beziehung zwischen Rollen und Permissions
@@ -117,7 +112,6 @@ CREATE TABLE IF NOT EXISTS `mbc_role_permissions` (
 COMMENT='Rollen-Permissions-Zuweisungen (Many-to-Many)';
 
 
--- >>> aus: 05_create_user_permissions_table.sql ------------------------------------------------------------
 -- ======================================================================
 -- Tabelle: mbc_user_permissions
 -- Beschreibung: Many-to-Many Beziehung für individuelle User-Permissions
@@ -147,7 +141,6 @@ CREATE TABLE IF NOT EXISTS `mbc_user_permissions` (
 COMMENT='Individuelle User-Permissions (Many-to-Many, optional)';
 
 
--- >>> aus: 11_migration_rename_id_columns.sql ------------------------------------------------------------
 -- ======================================================================
 -- Migration: Umbenennung der ID-Spalten zum Schema {tabellenname}_id
 -- Datum: 2025-11-22
@@ -274,8 +267,6 @@ SET FOREIGN_KEY_CHECKS = 1;
 SELECT 'Migration erfolgreich: ID-Spalten umbenannt zu {tabellenname}_id Schema' AS Status;
 
 
--- >>> aus: 35_users_ui_settings.sql ------------------------------------------------------------
--- 35_users_ui_settings.sql
 -- UI-Präferenzen pro Benutzer (Theme / Density / Accent).
 -- Spec: design-refactor.md → 3.3 Theme- & User-Settings.
 --

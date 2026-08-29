@@ -6,7 +6,6 @@
 -- ============================================================================
 
 
--- >>> aus: 001-iot-tables.sql ------------------------------------------------------------
 -- SPDX-License-Identifier: LicenseRef-OliverLohkemper-Proprietary
 
 -- ============================================================================
@@ -93,7 +92,6 @@ CREATE TABLE IF NOT EXISTS `mbc_iot_sensor_data` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
--- >>> aus: 003-iot-sensor-data-unique.sql ------------------------------------------------------------
 -- SPDX-License-Identifier: LicenseRef-OliverLohkemper-Proprietary
 --
 -- STORY-2.4 / TASK-2.4.4
@@ -109,7 +107,6 @@ ALTER TABLE `mbc_iot_sensor_data`
     UNIQUE (`mbc_iot_devices`, `sensor_key`, `zeitstempel`);
 
 
--- >>> aus: 004-iot-api-key-hash.sql ------------------------------------------------------------
 -- SPDX-License-Identifier: LicenseRef-OliverLohkemper-Proprietary
 
 -- ============================================================================
@@ -157,7 +154,6 @@ EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
 
--- >>> aus: 005-rate-limit-unique.sql ------------------------------------------------------------
 -- SPDX-License-Identifier: LicenseRef-OliverLohkemper-Proprietary
 
 -- ============================================================================
@@ -190,7 +186,6 @@ EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
 
--- >>> aus: 006-iot-provisioning.sql ------------------------------------------------------------
 -- SPDX-License-Identifier: LicenseRef-OliverLohkemper-Proprietary
 
 -- ============================================================================

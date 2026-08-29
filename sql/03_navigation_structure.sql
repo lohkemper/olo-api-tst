@@ -6,7 +6,6 @@
 -- ============================================================================
 
 
--- >>> aus: 07_create_navigation_table.sql ------------------------------------------------------------
 -- phpMyAdmin SQL Dump
 -- version 4.9.11
 -- https://www.phpmyadmin.net/
@@ -86,7 +85,6 @@ ALTER TABLE `mbc_navigations`
 COMMIT;
 
 
--- >>> aus: 08_create_navigation_roles_table.sql ------------------------------------------------------------
 -- ======================================================================
 -- Tabelle: mbc_navigation_roles
 -- Beschreibung: Many-to-Many Beziehung zwischen Navigation und Rollen
@@ -114,7 +112,6 @@ CREATE TABLE IF NOT EXISTS `mbc_navigation_roles` (
 COMMENT='Navigation-Rollen-Zuweisungen - Definiert Sichtbarkeit nach Rolle (Many-to-Many)';
 
 
--- >>> aus: 24_navigation_description.sql [struct-Teil: ALTER] ------------------------------------------------------------
 -- ============================================================================
 -- MBC Navigation - Beschreibungs-Spalte + Lager-Mega-Menü-Sub-Texte
 -- ============================================================================

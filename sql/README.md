@@ -3,13 +3,14 @@
 Diese SQL-Dateien bauen das komplette MBC-Datenbankschema auf. Die frühere
 Migrations-Historie (47 durchnummerierte Einzeldateien) wurde **pro Modul zu je
 einer Struktur- und einer Seed-Datei konsolidiert** (Statement-Reihenfolge und
--Inhalt bleiben erhalten; die Herkunft steht jeweils als `-- >>> aus: …`-Marker
-im Datei-Inneren).
+-Inhalt bleiben erhalten).
 
-## Dateiübersicht (17 Dateien)
+## Dateiübersicht (24 Dateien)
 
 Ausführungsreihenfolge = Dateinummer. **Struktur** (`CREATE`/`ALTER`/Trigger)
-und **Seed** (`INSERT`/Daten) sind pro Modul getrennt.
+und **Seed** (`INSERT`/Daten) sind pro Modul getrennt. `01`–`17` sind die
+konsolidierten Modul-Dateien; `18`+ sind spätere Einzel-Migrationen,
+`90`+ Wartungs-Skripte (nur bei Bedarf).
 
 | Datei                              | Inhalt                                                        |
 |------------------------------------|---------------------------------------------------------------|
@@ -30,6 +31,13 @@ und **Seed** (`INSERT`/Daten) sind pro Modul getrennt.
 | `15_gym_seed.sql`                  | Exercise-/Foods-Katalog + Permissions/Nav aller Gym-Phasen  |
 | `16_grow_structure.sql`            | Grow-Schema + Preparation-Fields                            |
 | `17_grow_seed.sql`                 | Grow-Permissions + Nav-Subpages                             |
+| `18_social_auth_structure.sql`     | Social-Login (Google/Facebook): Provider-Identitäten, password_hash NULL-fähig |
+| `19_mfa_structure.sql`             | MFA/2FA-Kern: Registry, TOTP, Backup-Codes, Trusted Devices |
+| `20_mfa_methods_structure.sql`     | MFA-Methoden: E-Mail-Einmalcodes + WebAuthn/Passkeys        |
+| `21_gym_health_structure.sql`      | Gym Health/Blutwerte: Key-Value-Zeitreihe + Nav-Eintrag     |
+| `22_gym_body_height.sql`           | Gym Körpermaße: `height_cm`-Spalte                          |
+| `23_gym_plan_day_split.sql`        | Gym Plan-Tage: `split`-Spalte (push/pull/legs/…)            |
+| `90_testaccount_reset.sql`         | Wartung: Cypress-Testaccount zurücksetzen (optional)        |
 
 **Konvention:** Erst alle Struktur- **und** Seed-Dateien in Nummern-Reihenfolge
 ausführen. Alles ist idempotent (`IF NOT EXISTS`, `INSERT IGNORE`,
@@ -59,8 +67,9 @@ Das RBAC/PBAC-System (`01`/`02`) besteht aus 5 Haupttabellen und 1 Seed:
 ### Alle Dateien in Reihenfolge ausführen
 
 ```bash
-# Alle 17 Dateien in Nummern-Reihenfolge (Struktur + Seed) einspielen:
-for f in $(ls [0-9]*_*.sql | sort); do
+# Alle nummerierten Dateien in Reihenfolge (Struktur + Seed) einspielen
+# (90_* nur bei Bedarf — Wartung, kein Setup):
+for f in $(ls [0-8][0-9]_*.sql | sort); do
   echo ">> $f"
   mysql -u username -p database_name < "$f"
 done

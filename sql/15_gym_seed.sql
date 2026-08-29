@@ -6,8 +6,7 @@
 -- ============================================================================
 
 
--- >>> aus: 25_gym-schema.sql [seed-Teil: Kategorien+Uebungen] ------------------------------------------------------------
--- (seed-Teil aus 25_gym-schema.sql)
+-- Exercise-Katalog: Kategorien + Übungen
 START TRANSACTION;
 INSERT IGNORE INTO mbc_gym_exercise_categories (name, muscle_group, parent_id, user_id) VALUES
   ('Brust',      'chest',     NULL, NULL),
@@ -86,14 +85,13 @@ INSERT IGNORE INTO mbc_gym_exercises
 COMMIT;
 
 
--- >>> aus: 26_seed_gym_permissions.sql ------------------------------------------------------------
 -- ============================================================================
 -- MBC Gym Module - Permissions & Navigation Seed
 -- ============================================================================
 -- Version: 0.1.0
 -- Erstellt: 2026-05-03
 -- Beschreibung: Berechtigungen und Top-Level-Navigation für das Gym-Modul.
---               Setzt 25_gym-schema.sql voraus.
+--               Setzt 14_gym_structure.sql voraus.
 -- ============================================================================
 
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
@@ -221,8 +219,7 @@ ON DUPLICATE KEY UPDATE
 -- ============================================================================
 
 
--- >>> aus: 27_gym_workouts.sql [seed-Teil] ------------------------------------------------------------
--- (seed-Teil aus 27_gym_workouts.sql)
+-- Workouts: Permissions
 START TRANSACTION;
 INSERT IGNORE INTO `mbc_permissions` (`name`, `resource`, `action`, `scope`, `description`) VALUES
 -- Workout Permissions
@@ -323,8 +320,7 @@ AND r.name IN ('user', 'moderator', 'admin', 'super_admin');
 COMMIT;
 
 
--- >>> aus: 28_gym_plans_records.sql [seed-Teil] ------------------------------------------------------------
--- (seed-Teil aus 28_gym_plans_records.sql)
+-- Pläne & Records: Permissions
 START TRANSACTION;
 INSERT IGNORE INTO `mbc_permissions` (`name`, `resource`, `action`, `scope`, `description`) VALUES
 ('gym.plans.read.own',          'gym_plans',          'read',   'own',  'Eigene Pläne anzeigen'),
@@ -413,8 +409,7 @@ AND r.name IN ('user', 'moderator', 'admin', 'super_admin');
 COMMIT;
 
 
--- >>> aus: 29_gym_body.sql [seed-Teil] ------------------------------------------------------------
--- (seed-Teil aus 29_gym_body.sql)
+-- Körpermaße: Permissions
 START TRANSACTION;
 INSERT IGNORE INTO `mbc_permissions` (`name`, `resource`, `action`, `scope`, `description`) VALUES
 ('gym.body_measurements.read.own',   'gym_body_measurements', 'read',   'own',  'Eigene Körpermaße anzeigen'),
@@ -495,8 +490,7 @@ AND r.name IN ('user', 'moderator', 'admin', 'super_admin');
 COMMIT;
 
 
--- >>> aus: 30_gym_cardio_nutrition.sql [seed-Teil: Foods+Permissions/Nav] ------------------------------------------------------------
--- (seed-Teil aus 30_gym_cardio_nutrition.sql)
+-- Foods-Katalog + Cardio/Nutrition-Permissions/Nav
 START TRANSACTION;
 INSERT IGNORE INTO mbc_gym_foods
   (user_id, name, brand, serving_size_g, kcal_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g, fiber_per_100g, is_template)
@@ -641,8 +635,7 @@ AND r.name IN ('user', 'moderator', 'admin', 'super_admin');
 COMMIT;
 
 
--- >>> aus: 31_gym_phase4.sql [seed-Teil] ------------------------------------------------------------
--- (seed-Teil aus 31_gym_phase4.sql)
+-- Phase 4: Coach-Rolle + Permissions
 START TRANSACTION;
 INSERT IGNORE INTO `mbc_roles` (`name`, `display_name`, `description`)
 VALUES ('gym_coach', 'Gym Coach', 'Kann Pläne an andere User zuweisen und deren Fortschritt verfolgen');

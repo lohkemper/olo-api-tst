@@ -6,7 +6,6 @@
 -- ============================================================================
 
 
--- >>> aus: 13_seed_article_permissions.sql ------------------------------------------------------------
 -- Seed Article Permissions
 -- Adds article-specific permissions to the system
 

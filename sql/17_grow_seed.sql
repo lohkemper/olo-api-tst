@@ -6,14 +6,12 @@
 -- ============================================================================
 
 
--- >>> aus: 34_seed_grow_permissions.sql ------------------------------------------------------------
 -- ============================================================================
--- 34_seed_grow_permissions.sql
 -- MBC Grow Module - Permissions & Navigation Seed
 -- ----------------------------------------------------------------------------
 -- Version: 0.1.0
 -- Beschreibung: Berechtigungen und Top-Level-Navigation für das Grow-Modul.
---               Setzt 33_grow-schema.sql voraus.
+--               Setzt 16_grow_structure.sql voraus.
 -- ============================================================================
 
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
@@ -114,16 +112,14 @@ ON DUPLICATE KEY UPDATE
   description = 'Berechtigungen und Navigation für Grow-Modul (Phase 1)';
 
 
--- >>> aus: 41_grow_nav_subpages.sql ------------------------------------------------------------
 -- ============================================================================
--- 41_grow_nav_subpages.sql
 -- Grow — Mega-Menü-Kinder unter dem „Grow"-Parent
 -- ============================================================================
 -- Legt die drei Grow-Unterseiten als Kinder des bestehenden Grow-Parents an
 -- (Durchläufe / Präparate / Kalender), jeweils mit Mega-Sub-Text (description).
 --
--- Voraussetzung: 34_seed_grow_permissions.sql (Grow-Parent /grow, parent_id NULL)
---                + 24_navigation_description.sql (description-Spalte).
+-- Voraussetzung: Grow-Permissions-Seed weiter oben (Grow-Parent /grow, parent_id NULL)
+--                + 03_navigation_structure.sql (description-Spalte).
 -- Idempotent: Existenz-Check je route via derived-table-NOT-EXISTS (kein 1093).
 -- ============================================================================
 
