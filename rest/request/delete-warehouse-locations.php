@@ -54,11 +54,34 @@ class requestDeleteWarehouseLocations extends RequestBase {
                 return;
             }
 
+            // Items mit Teilmengen-Splits im gelöschten Teilbaum merken:
+            // deren Junction-Zeilen fallen per CASCADE weg, danach muss die
+            // Primär-Location (items.location_id) neu berechnet werden.
+            $affectedItemIds = [];
+            try {
+                $sql = "
+                    SELECT DISTINCT il.item_id
+                    FROM " . PREFIX . "_warehouse_item_locations il
+                    INNER JOIN " . PREFIX . "_warehouse_locations l ON l.locations_id = il.location_id
+                    WHERE l.locations_id = ? OR l.path LIKE ?
+                ";
+                $stmt = $this->pdo->prepare($sql);
+                $stmt->execute([$locationId, ($location['path'] ?? '') . '/%']);
+                $affectedItemIds = array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+            } catch (\Throwable $e) {
+                // Tabelle fehlt (Pre-Migration) → SET NULL Constraint reicht
+            }
+
             // Delete location (CASCADE will delete children automatically)
             // Items will be set to location_id = NULL (SET NULL constraint)
             $sql = "DELETE FROM " . PREFIX . "_warehouse_locations WHERE locations_id = ?";
             $stmt = $this->pdo->prepare($sql);
             $stmt->execute([$locationId]);
+
+            // Falls andere Splits existieren, rückt die nächstgrößte Zuordnung nach
+            foreach ($affectedItemIds as $itemId) {
+                WarehouseItemLocations::recomputePrimaryLocation($this->pdo, $itemId);
+            }
 
             http_response_code(204); // No Content
         } catch (\Throwable $e) {

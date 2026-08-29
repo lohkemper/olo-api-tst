@@ -1243,3 +1243,114 @@ ON DUPLICATE KEY UPDATE
 -- Ende der Migration
 -- ============================================================================
 
+
+-- >>> Teilmengen-Zuordnung Item <-> Location (Multi-Location-Split) ----------------------------------------------------
+-- ============================================================================
+-- MBC Warehouse Module - Item-Location-Splits (n:m mit Teilmengen)
+-- ============================================================================
+-- Version: 1.4.0
+-- Erstellt: 2026-08-28
+-- Beschreibung: Ein Item kann auf MEHRERE Lagerplätze verteilt werden
+--   (z.B. 4 ESPs: 2 an Location A, 2 an Location B).
+--
+--   Modell:
+--   - mbc_warehouse_items.quantity bleibt der physische GESAMT-Bestand
+--     (Packlisten-Ledger unverändert: available = quantity - reserviert).
+--   - mbc_warehouse_item_locations hält die Teilmengen je Lagerplatz.
+--     Invariante: SUM(quantity je Item) <= items.quantity; Rest = unassigned.
+--   - mbc_warehouse_items.location_id bleibt als denormalisierte
+--     Primär-Location erhalten (Zuordnung mit größter Menge, bei Gleichstand
+--     kleinste item_locations_id) und wird vom Backend gepflegt.
+--   - UNIQUE(item_id, location_id): genau eine Zeile pro Item+Location;
+--     Assign auf belegte Location = Mengen-Merge (Upsert).
+--
+-- Signedness: items_id / locations_id / users_id sind auf Prod INT UNSIGNED —
+--   alle FK-Spalten hier MÜSSEN exakt matchen, sonst Fehler 1005 (errno 150).
+--
+-- Voraussetzung: Warehouse-Grundschema (Items + Locations), 00_create_users_table.sql
+-- ============================================================================
+
+SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
+SET AUTOCOMMIT = 0;
+START TRANSACTION;
+SET time_zone = "+00:00";
+
+CREATE TABLE IF NOT EXISTS mbc_warehouse_item_locations (
+  item_locations_id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+
+  user_id INT UNSIGNED NOT NULL COMMENT 'Denormalisiert für RLS-Filter',
+  item_id INT UNSIGNED NOT NULL,
+  location_id INT UNSIGNED NOT NULL,
+
+  quantity DECIMAL(10,2) NOT NULL DEFAULT 1.00 COMMENT 'Teilmenge an diesem Lagerplatz',
+  grid_row INT UNSIGNED DEFAULT NULL COMMENT 'Zeilenposition im Lagerplatz-Raster (1-basiert)',
+  grid_col INT UNSIGNED DEFAULT NULL COMMENT 'Spaltenposition im Lagerplatz-Raster (1-basiert)',
+
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+  CONSTRAINT fk_wh_il_user
+    FOREIGN KEY (user_id)
+    REFERENCES mbc_users(users_id)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE,
+
+  CONSTRAINT fk_wh_il_item
+    FOREIGN KEY (item_id)
+    REFERENCES mbc_warehouse_items(items_id)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE,
+
+  -- CASCADE: Location weg => Teilmenge wird automatisch "unassigned"
+  -- (Rest-Semantik; Primär-Recompute übernimmt der Backend-Handler)
+  CONSTRAINT fk_wh_il_location
+    FOREIGN KEY (location_id)
+    REFERENCES mbc_warehouse_locations(locations_id)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE,
+
+  UNIQUE KEY uq_wh_il_item_location (item_id, location_id),
+  INDEX idx_wh_il_user (user_id),
+  INDEX idx_wh_il_location (location_id)
+
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='Teilmengen-Zuordnung Item <-> Lagerplatz (n:m, Multi-Location-Split)';
+
+-- ---------------------------------------------------------------------------
+-- Backfill: bisherige Einzel-Zuordnung als eine Junction-Zeile mit voller Menge
+-- (idempotent: nur Items ohne bestehende Junction-Zeilen).
+-- EXISTS-Guards auf mbc_users/mbc_warehouse_locations: auf Prod existieren
+-- verwaiste Items (user_id ohne User — fk_item_user fehlt dort, Schema-Drift);
+-- die würden sonst mit errno 1452 den ganzen Backfill abbrechen. Waisen sind
+-- in der App unsichtbar (RLS-Filter) und werden bewusst übersprungen.
+-- ---------------------------------------------------------------------------
+INSERT INTO mbc_warehouse_item_locations (user_id, item_id, location_id, quantity, grid_row, grid_col)
+SELECT i.user_id, i.items_id, i.location_id, i.quantity, i.grid_row, i.grid_col
+FROM mbc_warehouse_items i
+WHERE i.location_id IS NOT NULL
+  AND EXISTS (
+    SELECT 1 FROM mbc_users u WHERE u.users_id = i.user_id
+  )
+  AND EXISTS (
+    SELECT 1 FROM mbc_warehouse_locations l WHERE l.locations_id = i.location_id
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM mbc_warehouse_item_locations il WHERE il.item_id = i.items_id
+  );
+
+COMMIT;
+
+-- ---------------------------------------------------------------------------
+-- Schema-Version dokumentieren
+-- ---------------------------------------------------------------------------
+INSERT INTO mbc_schema_versions (module, version, description)
+VALUES ('warehouse', '1.4.0', 'Item-Location-Splits: mbc_warehouse_item_locations (Teilmengen je Lagerplatz) + Backfill')
+ON DUPLICATE KEY UPDATE
+  version     = '1.4.0',
+  applied_at  = CURRENT_TIMESTAMP,
+  description = 'Item-Location-Splits: mbc_warehouse_item_locations (Teilmengen je Lagerplatz) + Backfill';
+
+-- ============================================================================
+-- Ende der Migration
+-- ============================================================================
+

@@ -79,6 +79,19 @@ class requestPostWarehouseItems extends RequestBase {
 
             $newItemId = (int)$this->pdo->lastInsertId();
 
+            // Teilmengen-Modell: Zuordnung mit voller Menge in der Junction spiegeln
+            // (hält die Invariante SUM(Splits) <= quantity ab Erzeugung)
+            if ($locationId !== null) {
+                WarehouseItemLocations::replaceAllWithSingle(
+                    $this->pdo,
+                    $userId,
+                    $newItemId,
+                    $locationId,
+                    $this->nullableUint($this->data['grid_row'] ?? null),
+                    $this->nullableUint($this->data['grid_col'] ?? null)
+                );
+            }
+
             // Handle tags
             if (isset($this->data['tags']) && is_array($this->data['tags'])) {
                 $this->updateItemTags($newItemId, $this->data['tags']);
@@ -90,7 +103,10 @@ class requestPostWarehouseItems extends RequestBase {
             $stmt->execute([$newItemId]);
             $item = $stmt->fetch(PDO::FETCH_ASSOC);
 
-            $enrichedItem = $this->enrichItemWithTags($item);
+            $enrichedItem = WarehouseItemLocations::enrichItemWithLocations(
+                $this->pdo,
+                $this->enrichItemWithTags($item)
+            );
 
             http_response_code(201);
             header('Content-Type: application/json');

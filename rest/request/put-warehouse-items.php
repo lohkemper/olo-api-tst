@@ -7,10 +7,15 @@ if (!STOKEN) die('SEC');
  * PUT handler for warehouse-items endpoint
  * Handles:
  * - PUT /api/warehouse-items/{id} (update item)
- * - PUT /api/warehouse-items/{id}/assign (assign to location)
- * - PUT /api/warehouse-items/{id}/unassign (remove assignment)
+ * - PUT /api/warehouse-items/{id}/assign (assign to location; mit optionalem
+ *   quantity/source_location_id = Teilmenge verschieben/splitten)
+ * - PUT /api/warehouse-items/{id}/unassign (remove assignment; mit optionalem
+ *   location_id/quantity = nur einen Split (teilweise) zurück in den Rest)
+ * - PUT /api/warehouse-items/{id}/locations (alle Zuordnungen atomar setzen)
  *
- * @version 1.0.0
+ * Teilmengen-Modell: siehe warehouse-item-locations-base.php.
+ *
+ * @version 1.1.0
  */
 class requestPutWarehouseItems extends RequestBase {
     private array $request = [];
@@ -55,6 +60,8 @@ class requestPutWarehouseItems extends RequestBase {
                     $this->handleAssignItem($userId, $itemId);
                 } elseif ($subroute === 'unassign') {
                     $this->handleUnassignItem($userId, $itemId);
+                } elseif ($subroute === 'locations') {
+                    $this->handleSetLocations($userId, $itemId);
                 } else {
                     http_response_code(404);
                     echo json_encode(['error' => 'Unknown subroute']);
@@ -100,27 +107,48 @@ class requestPutWarehouseItems extends RequestBase {
             $params[] = $_PUT['description'];
         }
 
-        if (isset($_PUT['location_id'])) {
-            $locationId = $_PUT['location_id'];
+        // location_id: array_key_exists, damit explizites null (Unassign über
+        // das Edit-Formular) durchgeht. Wird NICHT über $updates geschrieben,
+        // sondern unten via Junction-Replace + Legacy-Sync (Alt-Semantik:
+        // eine Location fürs ganze Item ersetzt alle Splits).
+        $locationProvided = array_key_exists('location_id', $_PUT);
+        $newLocationId = null;
 
-            if ($locationId !== null) {
-                // Validate location exists and belongs to user
-                $sql = "SELECT locations_id FROM " . PREFIX . "_warehouse_locations WHERE locations_id = ? AND user_id = ?";
-                $stmt = $this->pdo->prepare($sql);
-                $stmt->execute([$locationId, $userId]);
+        if ($locationProvided && $_PUT['location_id'] !== null) {
+            $newLocationId = (int)$_PUT['location_id'];
 
-                if (!$stmt->fetch()) {
-                    http_response_code(400);
-                    echo json_encode(['error' => 'Location not found or access denied']);
+            if (!WarehouseItemLocations::validateLocationOwnership($this->pdo, $userId, [$newLocationId])) {
+                http_response_code(400);
+                echo json_encode(['error' => 'Location not found or access denied']);
+                return;
+            }
+        }
+
+        // Menge, die einer einzelnen Voll-Zuordnung folgen darf: hat das Item
+        // genau einen Split über die komplette Menge (Standardfall), zieht der
+        // Split bei Mengenänderung mit. Sonst gilt strikt SUM <= quantity (409).
+        $followSingleAssignment = false;
+
+        if (isset($_PUT['quantity'])) {
+            if (!$locationProvided) {
+                $newQuantity = (float)$_PUT['quantity'];
+                $oldQuantity = (float)($existingItem['quantity'] ?? 0);
+                $assignments = WarehouseItemLocations::fetchAssignments($this->pdo, $itemId);
+                $assignedSum = array_sum(array_column($assignments, 'quantity'));
+
+                $followSingleAssignment = count($assignments) === 1
+                    && abs($assignedSum - $oldQuantity) < 1e-9;
+
+                if (!$followSingleAssignment && $newQuantity + 1e-9 < $assignedSum) {
+                    http_response_code(409);
+                    echo json_encode([
+                        'error' => 'Quantity below assigned total - reduce location assignments first',
+                        'assigned_quantity' => $assignedSum,
+                    ]);
                     return;
                 }
             }
 
-            $updates[] = "location_id = ?";
-            $params[] = $locationId;
-        }
-
-        if (isset($_PUT['quantity'])) {
             $updates[] = "quantity = ?";
             $params[] = $_PUT['quantity'];
         }
@@ -167,6 +195,48 @@ class requestPutWarehouseItems extends RequestBase {
             $stmt->execute($params);
         }
 
+        // Junction-Sync (Teilmengen-Modell)
+        if ($locationProvided) {
+            // Alt-Semantik: ersetzt alle Splits durch eine Voll-Zuordnung (oder keine)
+            WarehouseItemLocations::replaceAllWithSingle(
+                $this->pdo,
+                $userId,
+                $itemId,
+                $newLocationId,
+                array_key_exists('grid_row', $_PUT) ? $this->nullableUint($_PUT['grid_row']) : null,
+                array_key_exists('grid_col', $_PUT) ? $this->nullableUint($_PUT['grid_col']) : null
+            );
+        } else {
+            try {
+                if ($followSingleAssignment && isset($_PUT['quantity'])) {
+                    // Einzige Voll-Zuordnung zieht bei Mengenänderung mit
+                    $sql = "UPDATE " . PREFIX . "_warehouse_item_locations SET quantity = ? WHERE item_id = ?";
+                    $stmt = $this->pdo->prepare($sql);
+                    $stmt->execute([$_PUT['quantity'], $itemId]);
+                }
+
+                if ((array_key_exists('grid_row', $_PUT) || array_key_exists('grid_col', $_PUT))
+                    && $existingItem['location_id'] !== null
+                ) {
+                    // Grid-Änderung ohne Location-Wechsel → Primär-Zuordnung syncen
+                    $sql = "
+                        UPDATE " . PREFIX . "_warehouse_item_locations
+                        SET grid_row = ?, grid_col = ?
+                        WHERE item_id = ? AND location_id = ?
+                    ";
+                    $stmt = $this->pdo->prepare($sql);
+                    $stmt->execute([
+                        array_key_exists('grid_row', $_PUT) ? $this->nullableUint($_PUT['grid_row']) : $this->nullableUint($existingItem['grid_row']),
+                        array_key_exists('grid_col', $_PUT) ? $this->nullableUint($_PUT['grid_col']) : $this->nullableUint($existingItem['grid_col']),
+                        $itemId,
+                        (int)$existingItem['location_id'],
+                    ]);
+                }
+            } catch (\Throwable $e) {
+                // Tabelle fehlt (Pre-Migration) → Legacy-Spalten sind bereits gepflegt
+            }
+        }
+
         // Update tags if provided
         if (isset($_PUT['tags']) && is_array($_PUT['tags'])) {
             // Remove existing tags
@@ -178,13 +248,7 @@ class requestPutWarehouseItems extends RequestBase {
             $this->updateItemTags($itemId, $_PUT['tags']);
         }
 
-        // Fetch updated item
-        $sql = "SELECT * FROM " . PREFIX . "_warehouse_items WHERE items_id = ?";
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute([$itemId]);
-        $item = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        $enrichedItem = $this->enrichItemWithTags($item);
+        $enrichedItem = $this->fetchEnrichedItem($itemId);
 
         http_response_code(200);
         header('Content-Type: application/json');
@@ -193,6 +257,13 @@ class requestPutWarehouseItems extends RequestBase {
 
     /**
      * PUT /api/warehouse-items/{id}/assign - Assign item to location
+     *
+     * Body:
+     * - { location_id }                 Alt-Semantik: ganzes Item dorthin
+     *                                   (ersetzt alle Splits durch eine Voll-Zuordnung)
+     * - { location_id, quantity }       Teilmenge aus dem unassigned-Rest dorthin
+     * - { location_id, quantity,
+     *     source_location_id }          Teilmenge von einem bestehenden Split dorthin
      */
     private function handleAssignItem(int $userId, int $itemId): void {
         global $_PUT;
@@ -217,39 +288,151 @@ class requestPutWarehouseItems extends RequestBase {
 
         $locationId = (int)$_PUT['location_id'];
 
-        // Validate location exists and belongs to user
-        $sql = "SELECT locations_id FROM " . PREFIX . "_warehouse_locations WHERE locations_id = ? AND user_id = ?";
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute([$locationId, $userId]);
-
-        if (!$stmt->fetch()) {
+        if (!WarehouseItemLocations::validateLocationOwnership($this->pdo, $userId, [$locationId])) {
             http_response_code(400);
             echo json_encode(['error' => 'Location not found or access denied']);
             return;
         }
 
-        // Update item
-        $sql = "UPDATE " . PREFIX . "_warehouse_items SET location_id = ? WHERE items_id = ?";
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute([$locationId, $itemId]);
+        $gridRow = array_key_exists('grid_row', $_PUT) ? $this->nullableUint($_PUT['grid_row']) : null;
+        $gridCol = array_key_exists('grid_col', $_PUT) ? $this->nullableUint($_PUT['grid_col']) : null;
 
-        // Fetch updated item
-        $sql = "SELECT * FROM " . PREFIX . "_warehouse_items WHERE items_id = ?";
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute([$itemId]);
-        $item = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!isset($_PUT['quantity'])) {
+            // Alt-Semantik: ganzes Item an diese Location
+            WarehouseItemLocations::replaceAllWithSingle($this->pdo, $userId, $itemId, $locationId, $gridRow, $gridCol);
+            $this->respondWithItem($itemId);
+            return;
+        }
 
-        $enrichedItem = $this->enrichItemWithTags($item);
+        // Teilmengen-Semantik
+        $quantity = round((float)$_PUT['quantity'], 2);
+        if ($quantity <= 0) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Quantity must be greater than 0']);
+            return;
+        }
 
-        http_response_code(200);
-        header('Content-Type: application/json');
-        echo json_encode($enrichedItem);
+        $sourceLocationId = isset($_PUT['source_location_id']) ? (int)$_PUT['source_location_id'] : null;
+
+        $this->pdo->beginTransaction();
+        try {
+            // Item sperren, damit Rest-Berechnung und Upsert atomar sind
+            $sql = "SELECT quantity FROM " . PREFIX . "_warehouse_items WHERE items_id = ? AND user_id = ? FOR UPDATE";
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([$itemId, $userId]);
+            $totalQuantity = (float)$stmt->fetchColumn();
+
+            if ($sourceLocationId !== null) {
+                // Quelle: bestehender Split
+                $sql = "
+                    SELECT item_locations_id, quantity
+                    FROM " . PREFIX . "_warehouse_item_locations
+                    WHERE item_id = ? AND location_id = ?
+                    FOR UPDATE
+                ";
+                $stmt = $this->pdo->prepare($sql);
+                $stmt->execute([$itemId, $sourceLocationId]);
+                $source = $stmt->fetch(PDO::FETCH_ASSOC);
+
+                if (!$source && (int)($item['location_id'] ?? 0) === $sourceLocationId) {
+                    // Legacy-Fallback: Item hängt nur über items.location_id an der
+                    // Quelle (Zuordnung entstand vor der Junction-Synchronisation,
+                    // z.B. zwischen Backfill und Backend-Deploy) → Voll-Zuordnung
+                    // on-the-fly spiegeln und damit normal weiterarbeiten.
+                    $ins = $this->pdo->prepare("
+                        INSERT INTO " . PREFIX . "_warehouse_item_locations
+                            (user_id, item_id, location_id, quantity, grid_row, grid_col)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    ");
+                    $ins->execute([
+                        $userId,
+                        $itemId,
+                        $sourceLocationId,
+                        $totalQuantity,
+                        $this->nullableUint($item['grid_row'] ?? null),
+                        $this->nullableUint($item['grid_col'] ?? null),
+                    ]);
+                    $source = [
+                        'item_locations_id' => (int)$this->pdo->lastInsertId(),
+                        'quantity' => $totalQuantity,
+                    ];
+                }
+
+                if (!$source) {
+                    $this->pdo->rollBack();
+                    http_response_code(400);
+                    echo json_encode(['error' => 'Source location has no assignment for this item']);
+                    return;
+                }
+
+                $sourceQuantity = (float)$source['quantity'];
+                if ($sourceQuantity + 1e-9 < $quantity) {
+                    $this->pdo->rollBack();
+                    http_response_code(409);
+                    echo json_encode([
+                        'error' => 'Insufficient quantity at source location',
+                        'available_quantity' => $sourceQuantity,
+                    ]);
+                    return;
+                }
+
+                if (abs($sourceQuantity - $quantity) < 1e-9) {
+                    $sql = "DELETE FROM " . PREFIX . "_warehouse_item_locations WHERE item_locations_id = ?";
+                    $stmt = $this->pdo->prepare($sql);
+                    $stmt->execute([(int)$source['item_locations_id']]);
+                } else {
+                    $sql = "UPDATE " . PREFIX . "_warehouse_item_locations SET quantity = quantity - ? WHERE item_locations_id = ?";
+                    $stmt = $this->pdo->prepare($sql);
+                    $stmt->execute([$quantity, (int)$source['item_locations_id']]);
+                }
+            } else {
+                // Quelle: unassigned-Rest
+                $rest = $totalQuantity - WarehouseItemLocations::assignedSum($this->pdo, $itemId);
+                if ($rest + 1e-9 < $quantity) {
+                    $this->pdo->rollBack();
+                    http_response_code(409);
+                    echo json_encode([
+                        'error' => 'Insufficient unassigned quantity',
+                        'unassigned_quantity' => max(0, $rest),
+                    ]);
+                    return;
+                }
+            }
+
+            // Ziel-Upsert: bestehende Zuordnung an der Ziel-Location wird gemergt
+            $sql = "
+                INSERT INTO " . PREFIX . "_warehouse_item_locations
+                    (user_id, item_id, location_id, quantity, grid_row, grid_col)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE quantity = quantity + VALUES(quantity)
+            ";
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([$userId, $itemId, $locationId, $quantity, $gridRow, $gridCol]);
+
+            WarehouseItemLocations::recomputePrimaryLocation($this->pdo, $itemId);
+
+            $this->pdo->commit();
+        } catch (\Throwable $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw $e;
+        }
+
+        $this->respondWithItem($itemId);
     }
 
     /**
      * PUT /api/warehouse-items/{id}/unassign - Remove item assignment
+     *
+     * Body:
+     * - {}                              Alt-Semantik: alle Zuordnungen entfernen
+     * - { location_id }                 nur diesen Split komplett in den Rest
+     * - { location_id, quantity }       Teilmenge dieses Splits in den Rest
      */
     private function handleUnassignItem(int $userId, int $itemId): void {
+        global $_PUT;
+
         // Verify item exists and belongs to user
         $sql = "SELECT * FROM " . PREFIX . "_warehouse_items WHERE items_id = ? AND user_id = ?";
         $stmt = $this->pdo->prepare($sql);
@@ -262,22 +445,221 @@ class requestPutWarehouseItems extends RequestBase {
             return;
         }
 
-        // Update item (set location_id to NULL)
-        $sql = "UPDATE " . PREFIX . "_warehouse_items SET location_id = NULL WHERE items_id = ?";
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute([$itemId]);
+        if (!isset($_PUT['location_id'])) {
+            // Alt-Semantik: alle Zuordnungen entfernen
+            WarehouseItemLocations::replaceAllWithSingle($this->pdo, $userId, $itemId, null);
+            $this->respondWithItem($itemId);
+            return;
+        }
 
-        // Fetch updated item
+        $locationId = (int)$_PUT['location_id'];
+
+        $sql = "
+            SELECT item_locations_id, quantity
+            FROM " . PREFIX . "_warehouse_item_locations
+            WHERE item_id = ? AND location_id = ?
+        ";
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([$itemId, $locationId]);
+        $assignment = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$assignment && (int)($item['location_id'] ?? 0) === $locationId) {
+            // Legacy-Fallback: Item hängt nur über items.location_id an dieser
+            // Location (keine Junction-Zeile) → Voll-Zuordnung on-the-fly
+            // spiegeln, damit auch Teil-Unassigns funktionieren.
+            $ins = $this->pdo->prepare("
+                INSERT INTO " . PREFIX . "_warehouse_item_locations
+                    (user_id, item_id, location_id, quantity, grid_row, grid_col)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ");
+            $ins->execute([
+                $userId,
+                $itemId,
+                $locationId,
+                (float)($item['quantity'] ?? 1),
+                $this->nullableUint($item['grid_row'] ?? null),
+                $this->nullableUint($item['grid_col'] ?? null),
+            ]);
+            $assignment = [
+                'item_locations_id' => (int)$this->pdo->lastInsertId(),
+                'quantity' => (float)($item['quantity'] ?? 1),
+            ];
+        }
+
+        if (!$assignment) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Location has no assignment for this item']);
+            return;
+        }
+
+        $assignmentQuantity = (float)$assignment['quantity'];
+        $quantity = isset($_PUT['quantity']) ? round((float)$_PUT['quantity'], 2) : $assignmentQuantity;
+
+        if ($quantity <= 0) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Quantity must be greater than 0']);
+            return;
+        }
+
+        if ($assignmentQuantity + 1e-9 < $quantity) {
+            http_response_code(409);
+            echo json_encode([
+                'error' => 'Insufficient quantity at location',
+                'available_quantity' => $assignmentQuantity,
+            ]);
+            return;
+        }
+
+        if (abs($assignmentQuantity - $quantity) < 1e-9) {
+            $sql = "DELETE FROM " . PREFIX . "_warehouse_item_locations WHERE item_locations_id = ?";
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([(int)$assignment['item_locations_id']]);
+        } else {
+            $sql = "UPDATE " . PREFIX . "_warehouse_item_locations SET quantity = quantity - ? WHERE item_locations_id = ?";
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([$quantity, (int)$assignment['item_locations_id']]);
+        }
+
+        WarehouseItemLocations::recomputePrimaryLocation($this->pdo, $itemId);
+
+        $this->respondWithItem($itemId);
+    }
+
+    /**
+     * PUT /api/warehouse-items/{id}/locations - Alle Zuordnungen atomar setzen
+     *
+     * Body: { locations: [ { location_id, quantity, grid_row?, grid_col? }, ... ] }
+     * Validierung: Ownership, keine Duplikate, quantity > 0, SUM <= item.quantity.
+     */
+    private function handleSetLocations(int $userId, int $itemId): void {
+        global $_PUT;
+
+        if (!isset($_PUT['locations']) || !is_array($_PUT['locations'])) {
+            http_response_code(400);
+            echo json_encode(['error' => 'locations array is required']);
+            return;
+        }
+
+        // Eingabe normalisieren + validieren (vor der Transaktion)
+        $entries = [];
+        $locationIds = [];
+        $sum = 0.0;
+
+        foreach ($_PUT['locations'] as $entry) {
+            if (!is_array($entry) || !isset($entry['location_id']) || !isset($entry['quantity'])) {
+                http_response_code(400);
+                echo json_encode(['error' => 'Each entry requires location_id and quantity']);
+                return;
+            }
+
+            $locationId = (int)$entry['location_id'];
+            $quantity = round((float)$entry['quantity'], 2);
+
+            if ($quantity <= 0) {
+                http_response_code(400);
+                echo json_encode(['error' => 'Quantity must be greater than 0']);
+                return;
+            }
+
+            if (in_array($locationId, $locationIds, true)) {
+                http_response_code(400);
+                echo json_encode(['error' => 'Duplicate location_id in locations array']);
+                return;
+            }
+
+            $locationIds[] = $locationId;
+            $sum += $quantity;
+            $entries[] = [
+                'location_id' => $locationId,
+                'quantity' => $quantity,
+                'grid_row' => array_key_exists('grid_row', $entry) ? $this->nullableUint($entry['grid_row']) : null,
+                'grid_col' => array_key_exists('grid_col', $entry) ? $this->nullableUint($entry['grid_col']) : null,
+            ];
+        }
+
+        if (!WarehouseItemLocations::validateLocationOwnership($this->pdo, $userId, $locationIds)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Location not found or access denied']);
+            return;
+        }
+
+        $this->pdo->beginTransaction();
+        try {
+            $sql = "SELECT quantity FROM " . PREFIX . "_warehouse_items WHERE items_id = ? AND user_id = ? FOR UPDATE";
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([$itemId, $userId]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$row) {
+                $this->pdo->rollBack();
+                http_response_code(404);
+                echo json_encode(['error' => 'Item not found']);
+                return;
+            }
+
+            $totalQuantity = (float)$row['quantity'];
+            if ($sum > $totalQuantity + 1e-9) {
+                $this->pdo->rollBack();
+                http_response_code(409);
+                echo json_encode([
+                    'error' => 'Assigned total exceeds item quantity',
+                    'item_quantity' => $totalQuantity,
+                    'assigned_quantity' => $sum,
+                ]);
+                return;
+            }
+
+            $stmt = $this->pdo->prepare("DELETE FROM " . PREFIX . "_warehouse_item_locations WHERE item_id = ?");
+            $stmt->execute([$itemId]);
+
+            $sql = "
+                INSERT INTO " . PREFIX . "_warehouse_item_locations
+                    (user_id, item_id, location_id, quantity, grid_row, grid_col)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ";
+            $stmt = $this->pdo->prepare($sql);
+            foreach ($entries as $entry) {
+                $stmt->execute([
+                    $userId,
+                    $itemId,
+                    $entry['location_id'],
+                    $entry['quantity'],
+                    $entry['grid_row'],
+                    $entry['grid_col'],
+                ]);
+            }
+
+            WarehouseItemLocations::recomputePrimaryLocation($this->pdo, $itemId);
+
+            $this->pdo->commit();
+        } catch (\Throwable $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw $e;
+        }
+
+        $this->respondWithItem($itemId);
+    }
+
+    /**
+     * Antwortet mit dem frisch geladenen, angereicherten Item als NACKTES Objekt
+     * (Konvention der assign/unassign/locations-Subroutes).
+     */
+    private function respondWithItem(int $itemId): void {
+        http_response_code(200);
+        header('Content-Type: application/json');
+        echo json_encode($this->fetchEnrichedItem($itemId));
+    }
+
+    /** Item frisch laden und um Tags + Location-Splits anreichern. */
+    private function fetchEnrichedItem(int $itemId): array {
         $sql = "SELECT * FROM " . PREFIX . "_warehouse_items WHERE items_id = ?";
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute([$itemId]);
         $item = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        $enrichedItem = $this->enrichItemWithTags($item);
-
-        http_response_code(200);
-        header('Content-Type: application/json');
-        echo json_encode($enrichedItem);
+        return WarehouseItemLocations::enrichItemWithLocations($this->pdo, $this->enrichItemWithTags($item));
     }
 
     /**

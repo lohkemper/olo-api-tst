@@ -8,10 +8,14 @@ if (!STOKEN) die('SEC');
  * Handles:
  * - GET /api/warehouse-items (all items for user)
  * - GET /api/warehouse-items/{id} (specific item)
+ * - GET /api/warehouse-items/{id}/locations (Location-Splits des Items)
  * - GET /api/warehouse-items/search?q=query (search items)
  * - GET /api/warehouse-items/by-tag?tag=tagname (items by tag)
  *
- * @version 1.0.0
+ * Alle Item-Responses enthalten ein 'locations'-Array (Teilmengen-Splits,
+ * siehe warehouse-item-locations-base.php).
+ *
+ * @version 1.1.0
  */
 class requestGetWarehouseItems extends RequestBase {
     private array $request = [];
@@ -40,6 +44,17 @@ class requestGetWarehouseItems extends RequestBase {
                 $itemId = is_array($this->request['id'])
                     ? (int)$this->request['id'][0]
                     : (int)$this->request['id'];
+
+                // /{id}/locations VOR dem reinen id-Zweig prüfen
+                if (isset($this->request['subroute'])) {
+                    if ($this->request['subroute'] === 'locations') {
+                        $this->handleGetItemLocations($userId, $itemId);
+                    } else {
+                        http_response_code(404);
+                        echo json_encode(['error' => 'Unknown subroute']);
+                    }
+                    return;
+                }
 
                 $this->handleGetItem($userId, $itemId);
             } elseif (isset($this->request['subroute'])) {
@@ -79,7 +94,13 @@ class requestGetWarehouseItems extends RequestBase {
             if ($this->request['location_id'] === 'null' || $this->request['location_id'] === '') {
                 $sql .= " AND location_id IS NULL";
             } else {
-                $sql .= " AND location_id = ?";
+                // Primär-Location ODER beliebiger Teilmengen-Split an dieser Location
+                $sql .= " AND (location_id = ? OR EXISTS (
+                    SELECT 1 FROM " . PREFIX . "_warehouse_item_locations il
+                    WHERE il.item_id = " . PREFIX . "_warehouse_items.items_id
+                      AND il.location_id = ?
+                ))";
+                $params[] = (int)$this->request['location_id'];
                 $params[] = (int)$this->request['location_id'];
             }
         }
@@ -92,6 +113,7 @@ class requestGetWarehouseItems extends RequestBase {
 
         // Enrich with tags
         $enrichedItems = array_map([$this, 'enrichItemWithTags'], $items);
+        $enrichedItems = WarehouseItemLocations::enrichItemsWithLocations($this->pdo, $enrichedItems);
 
         http_response_code(200);
         header('Content-Type: application/json');
@@ -118,11 +140,33 @@ class requestGetWarehouseItems extends RequestBase {
             return;
         }
 
-        $enrichedItem = $this->enrichItemWithTags($item);
+        $enrichedItem = WarehouseItemLocations::enrichItemWithLocations(
+            $this->pdo,
+            $this->enrichItemWithTags($item)
+        );
 
         http_response_code(200);
         header('Content-Type: application/json');
         echo json_encode([$enrichedItem]);
+    }
+
+    /**
+     * GET /api/warehouse-items/{id}/locations - Location-Splits des Items
+     */
+    private function handleGetItemLocations(int $userId, int $itemId): void {
+        $sql = "SELECT items_id FROM " . PREFIX . "_warehouse_items WHERE items_id = ? AND user_id = ?";
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([$itemId, $userId]);
+
+        if (!$stmt->fetch()) {
+            http_response_code(404);
+            echo json_encode(['error' => 'Item not found']);
+            return;
+        }
+
+        http_response_code(200);
+        header('Content-Type: application/json');
+        echo json_encode(WarehouseItemLocations::fetchAssignments($this->pdo, $itemId));
     }
 
     /**
@@ -154,6 +198,7 @@ class requestGetWarehouseItems extends RequestBase {
         $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         $enrichedItems = array_map([$this, 'enrichItemWithTags'], $items);
+        $enrichedItems = WarehouseItemLocations::enrichItemsWithLocations($this->pdo, $enrichedItems);
 
         http_response_code(200);
         header('Content-Type: application/json');
@@ -186,6 +231,7 @@ class requestGetWarehouseItems extends RequestBase {
         $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         $enrichedItems = array_map([$this, 'enrichItemWithTags'], $items);
+        $enrichedItems = WarehouseItemLocations::enrichItemsWithLocations($this->pdo, $enrichedItems);
 
         http_response_code(200);
         header('Content-Type: application/json');

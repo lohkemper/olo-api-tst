@@ -90,6 +90,8 @@ include('delete-role-permissions.php');
 include('delete-user-permissions.php');
 include('delete-user-roles.php');
 include('delete-articles.php');
+// Item-Location-Splits (gemeinsame Basis zuerst)
+include('warehouse-item-locations-base.php');
 include('get-warehouse-locations.php');
 include('get-warehouse-items.php');
 include('post-warehouse-locations.php');
@@ -310,6 +312,15 @@ class request {
       // Ohne dies landet die Sub-Action als 'groupby' und POST/DELETE fallen
       // destruktiv auf CREATE/DELETE des Artikels zurück.
       else if( $requestPath[0] === 'articles' && $i == 1 && isset($requestPath[2]) && preg_match('/^[0-9]+$/Uis', $value) && !preg_match('/^[0-9]+$/Uis', $requestPath[2]) ) {
+        $this->request['id'] = (int)$value;
+        $this->request['subroute'] = $requestPath[2];
+        break; // We've consumed all relevant path segments
+      }
+      // Special handling for warehouse-items actions:
+      // /warehouse-items/{id}/{action}  (assign|unassign|locations)
+      // Ohne dies landet die Sub-Action als 'groupby' und PUT fällt auf das
+      // generische Item-Update zurück (assign/unassign erreichen ihre Handler nie).
+      else if( $requestPath[0] === 'warehouse-items' && $i == 1 && isset($requestPath[2]) && preg_match('/^[0-9]+$/Uis', $value) && !preg_match('/^[0-9]+$/Uis', $requestPath[2]) ) {
         $this->request['id'] = (int)$value;
         $this->request['subroute'] = $requestPath[2];
         break; // We've consumed all relevant path segments
@@ -826,6 +837,17 @@ class request {
       ) {
         $handler = new requestPostWarehouseItemsUploadImage($this->pdo, '');
         $handler->execute();
+        return true;
+      }
+
+      // Guard: unbekannte Sub-Actions dürfen NICHT auf das generische
+      // CREATE/DELETE des Items durchfallen (destruktive Falle).
+      // GET/PUT verzweigen intern selbst auf 'subroute' (inkl. eigener 404s).
+      if (($this->methode === 'POST' || $this->methode === 'DELETE')
+        && isset($this->request['subroute'])
+      ) {
+        http_response_code(404);
+        echo json_encode(['error' => 'Unknown subroute']);
         return true;
       }
 

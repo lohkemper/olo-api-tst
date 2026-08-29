@@ -290,10 +290,13 @@ class requestGetWarehouseLocations extends RequestBase {
             $location = $stmt->fetch(PDO::FETCH_ASSOC);
 
             // Get items in this location and all descendants
+            // (Primär-Location ODER beliebiger Teilmengen-Split, DISTINCT wegen Mehrfach-Splits)
             $sql = "
-                SELECT i.*
+                SELECT DISTINCT i.*
                 FROM " . PREFIX . "_warehouse_items i
-                INNER JOIN " . PREFIX . "_warehouse_locations l ON i.location_id = l.locations_id
+                LEFT JOIN " . PREFIX . "_warehouse_item_locations il ON il.item_id = i.items_id
+                INNER JOIN " . PREFIX . "_warehouse_locations l
+                    ON l.locations_id = i.location_id OR l.locations_id = il.location_id
                 WHERE i.user_id = ?
                   AND (l.locations_id = ? OR l.path LIKE ?)
                 ORDER BY i.name ASC
@@ -303,24 +306,27 @@ class requestGetWarehouseLocations extends RequestBase {
             $stmt = $this->pdo->prepare($sql);
             $stmt->execute([$userId, $locationId, $pathPattern]);
         } else {
-            // Get items only at this location
+            // Get items only at this location (Primär-Location oder Teilmengen-Split)
             $sql = "
-                SELECT *
-                FROM " . PREFIX . "_warehouse_items
-                WHERE location_id = ? AND user_id = ?
-                ORDER BY name ASC
+                SELECT DISTINCT i.*
+                FROM " . PREFIX . "_warehouse_items i
+                LEFT JOIN " . PREFIX . "_warehouse_item_locations il ON il.item_id = i.items_id
+                WHERE i.user_id = ?
+                  AND (i.location_id = ? OR il.location_id = ?)
+                ORDER BY i.name ASC
             ";
 
             $stmt = $this->pdo->prepare($sql);
-            $stmt->execute([$locationId, $userId]);
+            $stmt->execute([$userId, $locationId, $locationId]);
         }
 
         $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        // Enrich items with tags
+        // Enrich items with tags + location splits
         $enrichedItems = array_map(function($item) {
             return $this->enrichItemWithTags($item);
         }, $items);
+        $enrichedItems = WarehouseItemLocations::enrichItemsWithLocations($this->pdo, $enrichedItems);
 
         http_response_code(200);
         header('Content-Type: application/json');
