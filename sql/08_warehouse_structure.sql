@@ -1456,3 +1456,66 @@ ON DUPLICATE KEY UPDATE
 -- Ende der Migration
 -- ============================================================================
 
+
+-- >>> Grid-Slot-Ausbau: mehrere Zeilen je Item+Location ----------------------------------------------------------------
+-- ============================================================================
+-- MBC Warehouse Module - Grid-Slots (mehrere Teilmengen je Item+Location)
+-- ============================================================================
+-- Version: 1.6.0
+-- Erstellt: 2026-08-29
+-- Beschreibung: Ein Item darf jetzt MEHRERE Zuordnungs-Zeilen an DERSELBEN
+--   Location haben — je Grid-Slot eine (z.B. 2 ESPs in R1·C1, 1 in R2·C3,
+--   1 ohne Position). Dazu fällt UNIQUE(item_id, location_id).
+--
+--   Eindeutigkeit wandert in die Backend-Merge-Logik (ein DB-UNIQUE über
+--   (item, location, grid_row, grid_col) wäre wegen NULL-Positionen wirkungslos
+--   — MySQL erlaubt beliebig viele NULL-Duplikate im UNIQUE): das Backend
+--   merged beim Schreiben immer in die Zeile mit identischem Slot
+--   (grid_row <=> ?, grid_col <=> ?) und ist der einzige Schreiber.
+--
+--   Reihenfolge WICHTIG: Der UNIQUE dient aktuell als Index für den FK
+--   fk_wh_il_item (item_id-Präfix). Erst Ersatz-Index anlegen, DANN droppen —
+--   sonst errno 150 beim Drop.
+--
+-- Idempotent via INFORMATION_SCHEMA-Checks.
+-- ============================================================================
+
+SET @schema := DATABASE();
+SET @tbl    := 'mbc_warehouse_item_locations';
+
+-- 1. Ersatz-Index (item_id, location_id) anlegen, falls noch nicht vorhanden
+SET @idx_exists := (
+  SELECT COUNT(DISTINCT INDEX_NAME) FROM INFORMATION_SCHEMA.STATISTICS
+  WHERE TABLE_SCHEMA = @schema AND TABLE_NAME = @tbl
+    AND INDEX_NAME = 'idx_wh_il_item_location'
+);
+SET @sql := IF(@idx_exists = 0,
+  CONCAT('ALTER TABLE `', @tbl, '` ADD INDEX idx_wh_il_item_location (item_id, location_id)'),
+  'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- 2. UNIQUE(item_id, location_id) droppen
+SET @uq_exists := (
+  SELECT COUNT(DISTINCT INDEX_NAME) FROM INFORMATION_SCHEMA.STATISTICS
+  WHERE TABLE_SCHEMA = @schema AND TABLE_NAME = @tbl
+    AND INDEX_NAME = 'uq_wh_il_item_location'
+);
+SET @sql := IF(@uq_exists > 0,
+  CONCAT('ALTER TABLE `', @tbl, '` DROP INDEX uq_wh_il_item_location'),
+  'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- ---------------------------------------------------------------------------
+-- Schema-Version dokumentieren
+-- ---------------------------------------------------------------------------
+INSERT INTO mbc_schema_versions (module, version, description)
+VALUES ('warehouse', '1.6.0', 'Grid-Slots: UNIQUE(item_id, location_id) -> Index; mehrere Slot-Zeilen je Item+Location')
+ON DUPLICATE KEY UPDATE
+  version     = '1.6.0',
+  applied_at  = CURRENT_TIMESTAMP,
+  description = 'Grid-Slots: UNIQUE(item_id, location_id) -> Index; mehrere Slot-Zeilen je Item+Location';
+
+-- ============================================================================
+-- Ende der Migration
+-- ============================================================================
+

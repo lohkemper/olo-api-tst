@@ -132,6 +132,48 @@ final class WarehouseItemLocations {
         ]);
     }
 
+    /** NULL-sicherer Slot-Vergleich einer Junction-Zeile mit (grid_row, grid_col). */
+    public static function sameSlot(array $row, ?int $gridRow, ?int $gridCol): bool {
+        $rowVal = isset($row['grid_row']) && $row['grid_row'] !== null ? (int)$row['grid_row'] : null;
+        $colVal = isset($row['grid_col']) && $row['grid_col'] !== null ? (int)$row['grid_col'] : null;
+        return $rowVal === $gridRow && $colVal === $gridCol;
+    }
+
+    /**
+     * Merged eine Teilmenge in die Slot-Zeile (item, location, grid_row, grid_col)
+     * bzw. legt sie an. Seit dem Grid-Slot-Ausbau (Schema 1.6.0) gibt es kein
+     * DB-UNIQUE mehr — der NULL-sichere Slot-Vergleich (<=>) hier ist die
+     * einzige Duplikat-Abwehr; alle Schreibpfade MÜSSEN über diesen Helfer gehen.
+     */
+    public static function upsertSlot(
+        PDO $pdo,
+        int $userId,
+        int $itemId,
+        int $locationId,
+        float $quantity,
+        ?int $gridRow,
+        ?int $gridCol
+    ): void {
+        $sql = "
+            UPDATE " . PREFIX . "_warehouse_item_locations
+            SET quantity = quantity + ?
+            WHERE item_id = ? AND location_id = ?
+              AND grid_row <=> ? AND grid_col <=> ?
+        ";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([$quantity, $itemId, $locationId, $gridRow, $gridCol]);
+
+        if ($stmt->rowCount() === 0) {
+            $sql = "
+                INSERT INTO " . PREFIX . "_warehouse_item_locations
+                    (user_id, item_id, location_id, quantity, grid_row, grid_col)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ";
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute([$userId, $itemId, $locationId, $quantity, $gridRow, $gridCol]);
+        }
+    }
+
     /** Prüft, ob ALLE Locations existieren und dem User gehören. */
     public static function validateLocationOwnership(PDO $pdo, int $userId, array $locationIds): bool {
         $locationIds = array_values(array_unique(array_map('intval', $locationIds)));
