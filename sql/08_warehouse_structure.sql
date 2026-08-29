@@ -1354,3 +1354,111 @@ ON DUPLICATE KEY UPDATE
 -- Ende der Migration
 -- ============================================================================
 
+
+-- >>> FK-Drift-Cleanup: fehlende User-/Tag-FKs + Waisen ----------------------------------------------------------------
+-- ============================================================================
+-- MBC Warehouse Module - FK-Drift-Cleanup
+-- ============================================================================
+-- Version: 1.5.0
+-- Erstellt: 2026-08-29
+-- Beschreibung: Auf Prod fehlen drei Fremdschlüssel (Schema-Drift, beim
+--   Multi-Location-Backfill via errno 1452 aufgefallen):
+--     - mbc_warehouse_items.fk_item_user          -> mbc_users
+--     - mbc_warehouse_locations.fk_location_user  -> mbc_users
+--     - mbc_warehouse_item_tags.fk_item_tag_tag   -> mbc_tags
+--   Dadurch existieren verwaiste Zeilen (user_id/tag_id ohne Gegenstück).
+--   Waisen sind in der App unsichtbar (RLS-Filter auf user_id) und werden
+--   gelöscht; danach werden die FKs idempotent nachgezogen.
+--
+--   Kaskaden beim Waisen-Delete (Prod-Stand verifiziert 2026-08-29):
+--     - Location-Delete: Kinder CASCADE (fk_location_parent), Items werden
+--       via fk_item_location auf NULL gesetzt, Splits CASCADE (fk_wh_il_location)
+--     - Item-Delete: Tag-Links CASCADE (fk_item_tag_item), Splits CASCADE
+--   Spaltentypen sind auf Prod bereits durchgängig INT UNSIGNED — kein ALTER
+--   COLUMN nötig; die FK-Adds matchen exakt.
+--
+-- Idempotent: DELETEs sind selbst-neutralisierend, FK-Adds via
+-- INFORMATION_SCHEMA-Check. WICHTIG: Vor Ausführung Backup empfohlen.
+-- ============================================================================
+
+-- ---------------------------------------------------------------------------
+-- 1. Waisen löschen (Reihenfolge: Locations vor Items, damit SET NULL /
+--    CASCADE der bestehenden FKs sauber greifen)
+-- ---------------------------------------------------------------------------
+
+DELETE l FROM mbc_warehouse_locations l
+LEFT JOIN mbc_users u ON u.users_id = l.user_id
+WHERE u.users_id IS NULL;
+
+DELETE i FROM mbc_warehouse_items i
+LEFT JOIN mbc_users u ON u.users_id = i.user_id
+WHERE u.users_id IS NULL;
+
+DELETE it FROM mbc_warehouse_item_tags it
+LEFT JOIN mbc_tags t ON t.tags_id = it.tag_id
+WHERE t.tags_id IS NULL;
+
+-- Defensiv: Split-Zeilen ohne User (sollte es dank fk_wh_il_user nicht geben)
+DELETE il FROM mbc_warehouse_item_locations il
+LEFT JOIN mbc_users u ON u.users_id = il.user_id
+WHERE u.users_id IS NULL;
+
+-- ---------------------------------------------------------------------------
+-- 2. Fehlende FKs idempotent nachziehen (INFORMATION_SCHEMA-Check-Pattern)
+-- ---------------------------------------------------------------------------
+
+SET @schema := DATABASE();
+
+-- fk_item_user: mbc_warehouse_items.user_id -> mbc_users.users_id
+SET @fk_exists := (
+  SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+  WHERE TABLE_SCHEMA = @schema AND TABLE_NAME = 'mbc_warehouse_items'
+    AND CONSTRAINT_NAME = 'fk_item_user' AND CONSTRAINT_TYPE = 'FOREIGN KEY'
+);
+SET @sql := IF(@fk_exists = 0,
+  'ALTER TABLE mbc_warehouse_items ADD CONSTRAINT fk_item_user
+     FOREIGN KEY (user_id) REFERENCES mbc_users(users_id)
+     ON DELETE CASCADE ON UPDATE CASCADE',
+  'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- fk_location_user: mbc_warehouse_locations.user_id -> mbc_users.users_id
+SET @fk_exists := (
+  SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+  WHERE TABLE_SCHEMA = @schema AND TABLE_NAME = 'mbc_warehouse_locations'
+    AND CONSTRAINT_NAME = 'fk_location_user' AND CONSTRAINT_TYPE = 'FOREIGN KEY'
+);
+SET @sql := IF(@fk_exists = 0,
+  'ALTER TABLE mbc_warehouse_locations ADD CONSTRAINT fk_location_user
+     FOREIGN KEY (user_id) REFERENCES mbc_users(users_id)
+     ON DELETE CASCADE ON UPDATE CASCADE',
+  'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- fk_item_tag_tag: mbc_warehouse_item_tags.tag_id -> mbc_tags.tags_id
+SET @fk_exists := (
+  SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+  WHERE TABLE_SCHEMA = @schema AND TABLE_NAME = 'mbc_warehouse_item_tags'
+    AND CONSTRAINT_NAME = 'fk_item_tag_tag' AND CONSTRAINT_TYPE = 'FOREIGN KEY'
+);
+SET @sql := IF(@fk_exists = 0,
+  'ALTER TABLE mbc_warehouse_item_tags ADD CONSTRAINT fk_item_tag_tag
+     FOREIGN KEY (tag_id) REFERENCES mbc_tags(tags_id)
+     ON DELETE CASCADE ON UPDATE CASCADE',
+  'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- ---------------------------------------------------------------------------
+-- 3. Schema-Version dokumentieren
+-- ---------------------------------------------------------------------------
+INSERT INTO mbc_schema_versions (module, version, description)
+VALUES ('warehouse', '1.5.0', 'FK-Drift-Cleanup: Waisen entfernt, fk_item_user/fk_location_user/fk_item_tag_tag nachgezogen')
+ON DUPLICATE KEY UPDATE
+  version     = '1.5.0',
+  applied_at  = CURRENT_TIMESTAMP,
+  description = 'FK-Drift-Cleanup: Waisen entfernt, fk_item_user/fk_location_user/fk_item_tag_tag nachgezogen';
+
+-- ============================================================================
+-- Ende der Migration
+-- ============================================================================
+
