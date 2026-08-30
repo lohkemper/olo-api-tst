@@ -28,6 +28,10 @@ $requestPath = $_REQUEST['r'];
 if(substr($requestPath,0,1) == '/') {
   $requestPath = substr($requestPath, 1);
 }
+// Trailing-Slash normalisieren: `warehouse-items/` erzeugte sonst ein leeres
+// Path-Segment, das der Parser als subroute='' ablegt — der Sub-Action-Guard
+// beantwortete POST-Creates dann mit 404 (Regression vom Grid-Slots-Release).
+$requestPath = rtrim($requestPath, '/');
 $requestMethod = $_SERVER['REQUEST_METHOD'];
 
 include('cfg/cfg.php');

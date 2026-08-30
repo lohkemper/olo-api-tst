@@ -843,8 +843,10 @@ class request {
       // Guard: unbekannte Sub-Actions dürfen NICHT auf das generische
       // CREATE/DELETE des Items durchfallen (destruktive Falle).
       // GET/PUT verzweigen intern selbst auf 'subroute' (inkl. eigener 404s).
+      // Nur ECHTE Subroutes blocken: ein Trailing-Slash (`warehouse-items/`)
+      // legte subroute='' ab und der Guard 404te den Create (Regression).
       if (($this->methode === 'POST' || $this->methode === 'DELETE')
-        && isset($this->request['subroute'])
+        && ($this->request['subroute'] ?? '') !== ''
       ) {
         http_response_code(404);
         echo json_encode(['error' => 'Unknown subroute']);
