@@ -124,8 +124,15 @@ class requestGetIotDevices extends RequestBase {
         echo json_encode($device);
     }
 
-    /** Online nur, wenn der letzte Heartbeat innerhalb dieses Fensters liegt (Sekunden). */
-    private const ONLINE_THRESHOLD_SECONDS = 300;
+    /**
+     * Online nur, wenn der letzte Heartbeat innerhalb dieses Fensters liegt
+     * (Sekunden). Muss größer sein als das Pi-Sync-Intervall (5 min, siehe
+     * pks-backend `-sync-interval`): 2× Intervall + 60 s Puffer verträgt einen
+     * verpassten Tick, ohne dass der Status zwischen den Ticks flackert. Die
+     * frühere Schwelle von exakt 300 s war gleich dem Intervall — jede kleine
+     * Verzögerung riss das Fenster und der Pi erschien als offline (2026-08-30).
+     */
+    private const ONLINE_THRESHOLD_SECONDS = 660;
 
     /**
      * Device-Zeile (DB snake_case) → camelCase-Response (matched IotDevice).

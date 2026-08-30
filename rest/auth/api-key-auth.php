@@ -67,6 +67,27 @@ class ApiKeyAuth {
             return null;
         }
 
+        self::touchHeartbeat($pdo, $device);
+
         return $device;
+    }
+
+    /**
+     * Jeder erfolgreich authentifizierte Request ist ein Lebenszeichen — nicht
+     * nur die Daten-Endpoints. Vorher setzten pi-sync/data-sync/heartbeat den
+     * Heartbeat jeweils selbst; der Pi galt dadurch als offline, sobald 5 min
+     * keine neuen Messwerte flossen, obwohl er jede Sync-Runde authentifiziert
+     * GET /iot/device-keys abruft (STORY-2.6, Vorfall 2026-08-30).
+     *
+     * `revoked` bleibt ausgenommen: ein gesperrtes Gerät soll im Admin-UI
+     * nicht als online erscheinen, auch wenn sein alter Key noch anklopft.
+     */
+    private static function touchHeartbeat(PDO $pdo, array $device): void {
+        if (($device['provisioning_status'] ?? '') === 'revoked') {
+            return;
+        }
+        $pdo->prepare(
+            'UPDATE mbc_iot_devices SET last_heartbeat = NOW(), online_status = ? WHERE iot_devices_id = ?'
+        )->execute(['online', (int)$device['iot_devices_id']]);
     }
 }

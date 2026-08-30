@@ -62,8 +62,8 @@ class requestPostIotPiSync extends RequestBase {
                 return;
             }
 
-            $this->touchHeartbeat((int)$piDevice['iot_devices_id']);
-
+            // Der Heartbeat des Pi selbst wird bereits von
+            // ApiKeyAuth::authenticateDevice gesetzt.
             $this->pdo->beginTransaction();
             $result = $this->processDevices($devices);
             if ($result === null) {
@@ -89,12 +89,6 @@ class requestPostIotPiSync extends RequestBase {
             }
             $this->handleError('Error in pi-sync', $e);
         }
-    }
-
-    private function touchHeartbeat(int $deviceId): void {
-        $this->pdo->prepare(
-            'UPDATE mbc_iot_devices SET last_heartbeat = NOW(), online_status = ? WHERE iot_devices_id = ?'
-        )->execute(['online', $deviceId]);
     }
 
     /**

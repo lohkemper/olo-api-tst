@@ -49,10 +49,7 @@ class requestPostIotDataSync extends RequestBase {
                 return;
             }
 
-            // Update heartbeat
-            $this->pdo->prepare(
-                'UPDATE mbc_iot_devices SET last_heartbeat = NOW(), online_status = ? WHERE iot_devices_id = ?'
-            )->execute(['online', $deviceId]);
+            // last_heartbeat hat bereits ApiKeyAuth::authenticateDevice gesetzt.
 
             // Insert sensor data
             $stmt = $this->pdo->prepare(

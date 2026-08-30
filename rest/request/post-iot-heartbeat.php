@@ -49,11 +49,8 @@ class requestPostIotHeartbeat extends RequestBase {
                 'iot/heartbeat:' . $deviceId, 60, 60
             );
 
-            // Update heartbeat (auch für pending — Lebenszeichen fürs Admin-UI)
-            $stmt = $this->pdo->prepare(
-                'UPDATE mbc_iot_devices SET last_heartbeat = NOW(), online_status = ? WHERE iot_devices_id = ?'
-            );
-            $stmt->execute(['online', $deviceId]);
+            // last_heartbeat hat bereits ApiKeyAuth::authenticateDevice gesetzt
+            // (auch für pending — Lebenszeichen fürs Admin-UI).
 
             $response = [
                 'status' => 'ok',
