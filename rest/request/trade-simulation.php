@@ -18,8 +18,25 @@ if (!STOKEN) die('SEC');
  */
 
 /**
+ * Untere 32 Bit von $x * $y — überlauffrei via 16-Bit-Hälften.
+ *
+ * WICHTIG: Zwei volle 32-Bit-Werte direkt zu multiplizieren überläuft
+ * PHP_INT_MAX (bis ~1.8e19 > 2^63-1) → PHP kippt auf Float, das
+ * anschließende &-Masking wirft pro Aufruf eine Precision-Warnung und
+ * liefert falsche Bits. Deshalb: xLo*y (≤ 2.8e14) + (xHi*yLo << 16)
+ * (≤ 2.8e14) — beide sicher im int64; Anteile ab Bit 32 fallen mod 2^32
+ * ohnehin weg.
+ */
+function tradeSimMul32(int $x, int $y): int {
+    $xLo = $x & 0xFFFF;
+    $xHi = ($x >> 16) & 0xFFFF;
+    return ($xLo * $y + (($xHi * ($y & 0xFFFF)) << 16)) & 0xFFFFFFFF;
+}
+
+/**
  * mulberry32-PRNG. PHP-Ints sind 64-bit — nach jeder Operation wird deshalb
- * explizit auf 32 Bit maskiert, damit die Sequenz plattformstabil ist.
+ * explizit auf 32 Bit maskiert, damit die Sequenz plattformstabil ist;
+ * Multiplikationen laufen über tradeSimMul32 (siehe dort).
  *
  * @return Closure(): float  Uniform-Zug in [0, 1)
  */
@@ -27,8 +44,8 @@ function tradeSimMulberry32(int $seed): Closure {
     $a = $seed & 0xFFFFFFFF;
     return function () use (&$a): float {
         $a = ($a + 0x6D2B79F5) & 0xFFFFFFFF;
-        $t = (($a ^ ($a >> 15)) * (($a | 1) & 0xFFFFFFFF)) & 0xFFFFFFFF;
-        $m = ((($t ^ ($t >> 7)) & 0xFFFFFFFF) * (($t | 61) & 0xFFFFFFFF)) & 0xFFFFFFFF;
+        $t = tradeSimMul32($a ^ ($a >> 15), ($a | 1) & 0xFFFFFFFF);
+        $m = tradeSimMul32(($t ^ ($t >> 7)) & 0xFFFFFFFF, ($t | 61) & 0xFFFFFFFF);
         $t = ((($t + $m) & 0xFFFFFFFF) ^ $t) & 0xFFFFFFFF;
         return (($t ^ ($t >> 14)) & 0xFFFFFFFF) / 4294967296.0;
     };
