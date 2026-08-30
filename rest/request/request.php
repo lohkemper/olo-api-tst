@@ -215,10 +215,12 @@ foreach ([
 // Trade-Modul (V1: Lernpfad + Markt). Defensiv geladen wie Grow.
 // trade-simulation.php MUSS vor den Kurs-Handlern stehen (pure functions).
 foreach ([
-  'trade-simulation',
+  'trade-simulation', 'trade-portfolio-base',
   'get-trade-securities', 'get-trade-security-prices', 'get-trade-quotes',
   'get-trade-lessons', 'get-trade-progress',
   'post-trade-lesson-start', 'post-trade-lesson-quiz',
+  'get-trade-portfolio', 'get-trade-portfolio-history', 'get-trade-orders',
+  'post-trade-orders', 'post-trade-portfolio-reset',
 ] as $tradeHandlerFile) {
   $tradeHandlerPath = __DIR__ . '/' . $tradeHandlerFile . '.php';
   if (is_file($tradeHandlerPath)) {
@@ -1084,6 +1086,47 @@ class request {
         $handler->setRequest($this->request);
         $handler->execute();
         return true;
+    }
+
+    // /trade/portfolio [+ /history (GET) | /reset (POST)] — 'portfolio' steht
+    // bewusst NICHT in normalizeTradePathId: das dritte Segment landet als
+    // 'groupby' (analog /gym/analytics/{report}).
+    if ($subroute === 'portfolio') {
+        $portfolioAction = (string)($this->request['groupby'] ?? '');
+        if ($this->methode === 'GET' && $portfolioAction === '') {
+            $handler = new requestGetTradePortfolio($this->pdo, '');
+            $handler->setRequest($this->request);
+            $handler->execute();
+            return true;
+        }
+        if ($this->methode === 'GET' && $portfolioAction === 'history') {
+            $handler = new requestGetTradePortfolioHistory($this->pdo, '');
+            $handler->setRequest($this->request);
+            $handler->execute();
+            return true;
+        }
+        if ($this->methode === 'POST' && $portfolioAction === 'reset') {
+            $handler = new requestPostTradePortfolioReset($this->pdo, '');
+            $handler->setData($_PUT ?? []);
+            $handler->execute();
+            return true;
+        }
+    }
+
+    // /trade/orders — GET Historie, POST neue Order (Gate im Handler)
+    if ($subroute === 'orders') {
+        if ($this->methode === 'GET') {
+            $handler = new requestGetTradeOrders($this->pdo, '');
+            $handler->setRequest($this->request);
+            $handler->execute();
+            return true;
+        }
+        if ($this->methode === 'POST') {
+            $handler = new requestPostTradeOrders($this->pdo, '');
+            $handler->setData($_PUT ?? []);
+            $handler->execute();
+            return true;
+        }
     }
 
     http_response_code(404);
