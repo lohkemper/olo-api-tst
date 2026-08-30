@@ -212,6 +212,19 @@ foreach ([
     include $growHandlerPath;
   }
 }
+// Trade-Modul (V1: Lernpfad + Markt). Defensiv geladen wie Grow.
+// trade-simulation.php MUSS vor den Kurs-Handlern stehen (pure functions).
+foreach ([
+  'trade-simulation',
+  'get-trade-securities', 'get-trade-security-prices', 'get-trade-quotes',
+  'get-trade-lessons', 'get-trade-progress',
+  'post-trade-lesson-start', 'post-trade-lesson-quiz',
+] as $tradeHandlerFile) {
+  $tradeHandlerPath = __DIR__ . '/' . $tradeHandlerFile . '.php';
+  if (is_file($tradeHandlerPath)) {
+    include $tradeHandlerPath;
+  }
+}
 
 class request {
   private array $logs = [];
@@ -982,7 +995,119 @@ class request {
         return $this->handleGrowRoutes();
     }
 
+    // Handle Trade routes: /trade/{subroute}
+    if ($area === 'trade') {
+        return $this->handleTradeRoutes();
+    }
+
     return false;
+  }
+
+  /**
+   * Handle Trade-specific routes (V1: Lernpfad + Markt).
+   *
+   * Subroutes:
+   *  - /trade/securities               GET (Liste)
+   *  - /trade/securities/{id}          GET (Detail)
+   *  - /trade/securities/{id}/prices   GET (?range=1m|3m|6m|1y|max)
+   *  - /trade/quotes                   GET (Batch: letzter Kurs + Delta + Sparkline)
+   *  - /trade/lessons                  GET (Liste inkl. Progress + locked)
+   *  - /trade/lessons/{id}             GET (Detail + sections + questions)
+   *  - /trade/lessons/{id}/start       POST (Progress-Upsert in_progress)
+   *  - /trade/lessons/{id}/quiz        POST (serverseitige Bewertung)
+   *  - /trade/progress                 GET (Zusammenfassung + unlocked_features)
+   *
+   * WICHTIG: unbekannte Subroutes/Sub-Actions enden hier IMMER in 404 —
+   * es gibt bewusst keine Tabelle mbc_trade, damit das generische
+   * Tabellen-Routing für /trade nie greifen kann.
+   */
+  private function handleTradeRoutes(): bool {
+    $subroute = $this->request['subroute'] ?? '';
+    global $_PUT;
+
+    $this->normalizeTradePathId($subroute);
+
+    // Sub-Actions /trade/{subroute}/{id}/{action} — der Path-Parser legt sie
+    // als ['<id>' => '<action>'] ab (analog gym start-day).
+    if ($subroute === 'securities' && $this->methode === 'GET') {
+        foreach ($this->request as $key => $value) {
+            if (ctype_digit((string)$key) && $value === 'prices') {
+                $handler = new requestGetTradeSecurityPrices($this->pdo, '');
+                $handler->setSecurityId((int)$key);
+                $handler->setRequest($this->request);
+                $handler->execute();
+                return true;
+            }
+        }
+    }
+    if ($subroute === 'lessons' && $this->methode === 'POST') {
+        foreach ($this->request as $key => $value) {
+            if (ctype_digit((string)$key) && ($value === 'start' || $value === 'quiz')) {
+                $handler = $value === 'start'
+                    ? new requestPostTradeLessonStart($this->pdo, '')
+                    : new requestPostTradeLessonQuiz($this->pdo, '');
+                $handler->setLessonId((int)$key);
+                $handler->setData($_PUT ?? []);
+                $handler->execute();
+                return true;
+            }
+        }
+        // POST auf /trade/lessons ohne bekannte Sub-Action ist nie ein Create
+        http_response_code(404);
+        echo json_encode(['error' => 'Unknown subroute']);
+        return true;
+    }
+
+    if ($subroute === 'securities' && $this->methode === 'GET') {
+        $handler = new requestGetTradeSecurities($this->pdo, '');
+        $handler->setRequest($this->request);
+        $handler->execute();
+        return true;
+    }
+
+    if ($subroute === 'quotes' && $this->methode === 'GET') {
+        $handler = new requestGetTradeQuotes($this->pdo, '');
+        $handler->setRequest($this->request);
+        $handler->execute();
+        return true;
+    }
+
+    if ($subroute === 'lessons' && $this->methode === 'GET') {
+        $handler = new requestGetTradeLessons($this->pdo, '');
+        $handler->setRequest($this->request);
+        $handler->execute();
+        return true;
+    }
+
+    if ($subroute === 'progress' && $this->methode === 'GET') {
+        $handler = new requestGetTradeProgress($this->pdo, '');
+        $handler->setRequest($this->request);
+        $handler->execute();
+        return true;
+    }
+
+    http_response_code(404);
+    echo json_encode(['error' => 'Unknown trade route']);
+    return true;
+  }
+
+  /**
+   * Wandelt eine trailing-ID (vom Path-Parser als 'groupby' abgelegt)
+   * in 'id' um — analog normalizeGrowPathId. Nur für Trade-Subroutes
+   * mit Detail-Endpoint; 'quotes' und 'progress' bleiben unberührt.
+   */
+  private function normalizeTradePathId(string $subroute): void {
+    if (!in_array($subroute, ['securities', 'lessons'], true)) {
+        return;
+    }
+    if (isset($this->request['id'])) {
+        return;
+    }
+    $groupby = $this->request['groupby'] ?? null;
+    if ($groupby !== null && ctype_digit((string)$groupby)) {
+        $this->request['id'] = (int)$groupby;
+        unset($this->request['groupby']);
+    }
   }
 
   /**
