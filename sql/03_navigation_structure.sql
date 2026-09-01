@@ -39,7 +39,6 @@ CREATE TABLE `mbc_navigations` (
   `permission_id` int(10) UNSIGNED DEFAULT NULL COMMENT 'Erforderliche Permission für Sichtbarkeit',
   `sort_order` smallint(5) UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Sortierung innerhalb der Ebene',
   `is_active` tinyint(1) NOT NULL DEFAULT 1 COMMENT 'Sichtbar/Aktiv',
-  `is_external` tinyint(1) NOT NULL DEFAULT 0 COMMENT 'Externer Link',
   `target` varchar(20) DEFAULT NULL COMMENT 'Link Target (_blank, _self, etc.)',
   `css_class` varchar(100) DEFAULT NULL COMMENT 'Zusätzliche CSS-Klassen',
   `badge_text` varchar(20) DEFAULT NULL COMMENT 'Badge-Text (z.B. "NEU", "BETA")',

@@ -1500,10 +1500,6 @@ components:
         is_active:
           type: boolean
           example: true
-        is_external:
-          type: boolean
-          example: false
-          description: true für externe Links
         target:
           type: string
           nullable: true
