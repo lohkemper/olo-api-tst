@@ -1,0 +1,263 @@
+{
+  "$comment": "Kanonische Fassung. Kopien liegen in den Submodulen (siehe README.md); check-contract-drift.sh vergleicht sie. Die PHP-Kopie kommt mit STORY-10.3.",
+  "contract": "Geraete-Descriptor Schema v2",
+  "version": 1,
+  "authority": "internal/provisioning.ParseDescriptorV2 in olo-go",
+  "rules": [
+    "Ein v2-Descriptor traegt schema = 2. Fehlt das Feld, ist es eine v1-Anmeldung; jeder andere Wert wird abgelehnt.",
+    "Pflichtfelder: schema, chip_id, name, typ, firmware_version, mqtt_base.",
+    "mqtt_base hat exakt 3 Segmente pks/{projekt}/{geraet}; Segment 0 ist exakt 'pks'; kein Segment leer; keine MQTT-Wildcards (+, #), keine Leerraum-Zeichen.",
+    "device_key = mqtt_base ohne das Praefix 'pks/'. Er wird deklariert, nicht aus Sensor-Topics hergeleitet.",
+    "Topics werden ausschliesslich abgeleitet: {mqtt_base}/{komponente.id}/{value_key}. Es gibt kein topic-Feld.",
+    "Komponenten-Ids und Value-Keys sind nicht-leere plain Segments (kein /, +, #, Leerraum) und Komponenten-Ids sind ueber sensoren und aktoren hinweg eindeutig.",
+    "Jede Komponente hat mindestens eine Value. type ist number, string oder boolean.",
+    "enum und min/max schliessen sich gegenseitig aus. enum ist nicht leer und typkonform zu type. min/max nur bei type number, min <= max.",
+    "intervall (Sekunden) ist, wenn gesetzt, groesser als 0."
+  ],
+  "cases": [
+    {
+      "name": "vollstaendiger Descriptor Modul 1",
+      "descriptor": {
+        "schema": 2,
+        "chip_id": "3cf8f4",
+        "name": "Garten pflanze1",
+        "typ": "esp8266",
+        "firmware_version": "2.0.0",
+        "mqtt_base": "pks/garten/pflanze1",
+        "sensoren": [
+          {
+            "id": "boden",
+            "name": "Bodenfeuchtigkeit",
+            "modell": "Kapazitiv v1.2",
+            "values": {
+              "bodenfeuchtigkeit": { "type": "number", "unit": "%", "intervall": 10 },
+              "raw": { "type": "number", "intervall": 10 }
+            }
+          }
+        ],
+        "aktoren": [
+          {
+            "id": "pumpe",
+            "name": "Wasserpumpe",
+            "values": {
+              "set": { "type": "number", "enum": [0, 64, 128, 192, 255] },
+              "status": { "type": "number", "readonly": true, "retained": true },
+              "auto": { "type": "string", "enum": ["an", "aus"], "retained": true },
+              "speed": { "type": "number", "min": 0, "max": 255, "retained": true },
+              "schwellwert": { "type": "number", "unit": "%", "readonly": true, "retained": true }
+            }
+          }
+        ]
+      },
+      "deviceKey": "garten/pflanze1",
+      "topics": [
+        "pks/garten/pflanze1/boden/bodenfeuchtigkeit",
+        "pks/garten/pflanze1/boden/raw",
+        "pks/garten/pflanze1/pumpe/auto",
+        "pks/garten/pflanze1/pumpe/schwellwert",
+        "pks/garten/pflanze1/pumpe/set",
+        "pks/garten/pflanze1/pumpe/speed",
+        "pks/garten/pflanze1/pumpe/status"
+      ],
+      "why": "Der Normalfall: das Referenzbeispiel aus KONZEPT-SELBSTBESCHREIBUNG-V2.md, alle Topics abgeleitet."
+    },
+    {
+      "name": "minimaler Descriptor",
+      "descriptor": {
+        "schema": 2,
+        "chip_id": "aa11bb",
+        "name": "Fensterbank",
+        "typ": "esp32",
+        "firmware_version": "2.0.0",
+        "mqtt_base": "pks/smarthome/fenster",
+        "sensoren": [
+          { "id": "temp", "name": "Temperatur", "values": { "temperatur": { "type": "number", "unit": "°C" } } }
+        ]
+      },
+      "deviceKey": "smarthome/fenster",
+      "topics": ["pks/smarthome/fenster/temp/temperatur"],
+      "why": "Ein Sensor, eine Value, keine Aktoren — das kleinste gueltige Geraet."
+    },
+    {
+      "name": "mqtt_base mit vier Segmenten",
+      "descriptor": {
+        "schema": 2, "chip_id": "x1", "name": "X", "typ": "esp8266", "firmware_version": "2.0.0",
+        "mqtt_base": "pks/garten/pflanze1/extra",
+        "sensoren": [{ "id": "s", "name": "S", "values": { "v": { "type": "number" } } }]
+      },
+      "deviceKey": null,
+      "why": "mqtt_base ist die Geraeteidentitaet pks/{projekt}/{geraet} — nicht mehr, nicht weniger."
+    },
+    {
+      "name": "mqtt_base mit zwei Segmenten",
+      "descriptor": {
+        "schema": 2, "chip_id": "x2", "name": "X", "typ": "esp8266", "firmware_version": "2.0.0",
+        "mqtt_base": "pks/garten",
+        "sensoren": [{ "id": "s", "name": "S", "values": { "v": { "type": "number" } } }]
+      },
+      "deviceKey": null,
+      "why": "Ohne Geraetesegment gibt es keinen device_key."
+    },
+    {
+      "name": "mqtt_base ohne pks-Praefix",
+      "descriptor": {
+        "schema": 2, "chip_id": "x3", "name": "X", "typ": "esp8266", "firmware_version": "2.0.0",
+        "mqtt_base": "home/garten/pflanze1",
+        "sensoren": [{ "id": "s", "name": "S", "values": { "v": { "type": "number" } } }]
+      },
+      "deviceKey": null,
+      "why": "Gehoert nicht in den PKS-Namensraum."
+    },
+    {
+      "name": "mqtt_base mit leerem Segment",
+      "descriptor": {
+        "schema": 2, "chip_id": "x4", "name": "X", "typ": "esp8266", "firmware_version": "2.0.0",
+        "mqtt_base": "pks//pflanze1",
+        "sensoren": [{ "id": "s", "name": "S", "values": { "v": { "type": "number" } } }]
+      },
+      "deviceKey": null,
+      "why": "Ein leeres Segment macht den Schluessel mehrdeutig — dieselbe Regel wie im device-key-Kontrakt."
+    },
+    {
+      "name": "mqtt_base mit Wildcard",
+      "descriptor": {
+        "schema": 2, "chip_id": "x5", "name": "X", "typ": "esp8266", "firmware_version": "2.0.0",
+        "mqtt_base": "pks/garten/+",
+        "sensoren": [{ "id": "s", "name": "S", "values": { "v": { "type": "number" } } }]
+      },
+      "deviceKey": null,
+      "why": "MQTT-Wildcards wuerden aus einer Identitaet einen Broadcast machen."
+    },
+    {
+      "name": "fehlendes schema-Feld ist v1",
+      "descriptor": {
+        "chip_id": "x6", "name": "X", "typ": "esp8266", "firmware_version": "1.0.0",
+        "mqtt_base": "pks/garten/pflanze1",
+        "sensoren": [{ "id": "s", "name": "S", "values": { "v": { "type": "number" } } }]
+      },
+      "deviceKey": null,
+      "why": "Ohne schema-Feld ist es eine v1-Anmeldung — der v2-Parser lehnt ab, der v1-Weg uebernimmt."
+    },
+    {
+      "name": "unbekannte Schemaversion",
+      "descriptor": {
+        "schema": 3, "chip_id": "x7", "name": "X", "typ": "esp8266", "firmware_version": "2.0.0",
+        "mqtt_base": "pks/garten/pflanze1",
+        "sensoren": [{ "id": "s", "name": "S", "values": { "v": { "type": "number" } } }]
+      },
+      "deviceKey": null,
+      "why": "Eine Version, die dieser Stand nicht kennt, wird abgelehnt statt geraten."
+    },
+    {
+      "name": "fehlende chip_id",
+      "descriptor": {
+        "schema": 2, "name": "X", "typ": "esp8266", "firmware_version": "2.0.0",
+        "mqtt_base": "pks/garten/pflanze1",
+        "sensoren": [{ "id": "s", "name": "S", "values": { "v": { "type": "number" } } }]
+      },
+      "deviceKey": null,
+      "why": "Ohne chip_id ist die Anmeldung keiner Hardware zuzuordnen."
+    },
+    {
+      "name": "enum und min gleichzeitig",
+      "descriptor": {
+        "schema": 2, "chip_id": "x8", "name": "X", "typ": "esp8266", "firmware_version": "2.0.0",
+        "mqtt_base": "pks/garten/pflanze1",
+        "aktoren": [{ "id": "a", "name": "A", "values": { "set": { "type": "number", "enum": [0, 1], "min": 0 } } }]
+      },
+      "deviceKey": null,
+      "why": "enum und min/max schliessen sich aus — zwei Wertemengen fuer eine Value waeren mehrdeutig."
+    },
+    {
+      "name": "enum nicht typkonform",
+      "descriptor": {
+        "schema": 2, "chip_id": "x9", "name": "X", "typ": "esp8266", "firmware_version": "2.0.0",
+        "mqtt_base": "pks/garten/pflanze1",
+        "aktoren": [{ "id": "a", "name": "A", "values": { "set": { "type": "number", "enum": ["0", "64"] } } }]
+      },
+      "deviceKey": null,
+      "why": "type number mit String-Enum: die Deklaration widerspricht sich selbst (Nutzerentscheidung 2026-09-03: enum-Werte typkonform)."
+    },
+    {
+      "name": "min/max bei type string",
+      "descriptor": {
+        "schema": 2, "chip_id": "x10", "name": "X", "typ": "esp8266", "firmware_version": "2.0.0",
+        "mqtt_base": "pks/garten/pflanze1",
+        "aktoren": [{ "id": "a", "name": "A", "values": { "set": { "type": "string", "min": 0, "max": 5 } } }]
+      },
+      "deviceKey": null,
+      "why": "Ein Wertebereich ist nur fuer Zahlen definiert."
+    },
+    {
+      "name": "min groesser max",
+      "descriptor": {
+        "schema": 2, "chip_id": "x11", "name": "X", "typ": "esp8266", "firmware_version": "2.0.0",
+        "mqtt_base": "pks/garten/pflanze1",
+        "aktoren": [{ "id": "a", "name": "A", "values": { "set": { "type": "number", "min": 10, "max": 5 } } }]
+      },
+      "deviceKey": null,
+      "why": "Ein leerer Wertebereich deklariert eine unbedienbare Value."
+    },
+    {
+      "name": "Komponente ohne Values",
+      "descriptor": {
+        "schema": 2, "chip_id": "x12", "name": "X", "typ": "esp8266", "firmware_version": "2.0.0",
+        "mqtt_base": "pks/garten/pflanze1",
+        "sensoren": [{ "id": "s", "name": "S", "values": {} }]
+      },
+      "deviceKey": null,
+      "why": "Eine Komponente ohne Values hat kein einziges Topic — sie existiert nicht."
+    },
+    {
+      "name": "Komponenten-Id mit Schraegstrich",
+      "descriptor": {
+        "schema": 2, "chip_id": "x13", "name": "X", "typ": "esp8266", "firmware_version": "2.0.0",
+        "mqtt_base": "pks/garten/pflanze1",
+        "sensoren": [{ "id": "boden/tief", "name": "S", "values": { "v": { "type": "number" } } }]
+      },
+      "deviceKey": null,
+      "why": "Ein Schraegstrich wuerde eine zusaetzliche Topic-Ebene einschmuggeln."
+    },
+    {
+      "name": "Value-Key mit Wildcard",
+      "descriptor": {
+        "schema": 2, "chip_id": "x14", "name": "X", "typ": "esp8266", "firmware_version": "2.0.0",
+        "mqtt_base": "pks/garten/pflanze1",
+        "sensoren": [{ "id": "s", "name": "S", "values": { "v+": { "type": "number" } } }]
+      },
+      "deviceKey": null,
+      "why": "Wildcards in abgeleiteten Topics sind dieselbe Gefahr wie in mqtt_base."
+    },
+    {
+      "name": "doppelte Komponenten-Id ueber sensoren und aktoren",
+      "descriptor": {
+        "schema": 2, "chip_id": "x15", "name": "X", "typ": "esp8266", "firmware_version": "2.0.0",
+        "mqtt_base": "pks/garten/pflanze1",
+        "sensoren": [{ "id": "pumpe", "name": "S", "values": { "v": { "type": "number" } } }],
+        "aktoren": [{ "id": "pumpe", "name": "A", "values": { "set": { "type": "number", "min": 0, "max": 255 } } }]
+      },
+      "deviceKey": null,
+      "why": "Zwei Komponenten mit derselben Id teilen sich denselben Topic-Raum — die Ableitung waere mehrdeutig."
+    },
+    {
+      "name": "unbekannter type",
+      "descriptor": {
+        "schema": 2, "chip_id": "x16", "name": "X", "typ": "esp8266", "firmware_version": "2.0.0",
+        "mqtt_base": "pks/garten/pflanze1",
+        "sensoren": [{ "id": "s", "name": "S", "values": { "v": { "type": "float" } } }]
+      },
+      "deviceKey": null,
+      "why": "type ist number, string oder boolean — nichts anderes."
+    },
+    {
+      "name": "intervall null",
+      "descriptor": {
+        "schema": 2, "chip_id": "x17", "name": "X", "typ": "esp8266", "firmware_version": "2.0.0",
+        "mqtt_base": "pks/garten/pflanze1",
+        "sensoren": [{ "id": "s", "name": "S", "values": { "v": { "type": "number", "intervall": 0 } } }]
+      },
+      "deviceKey": null,
+      "why": "Ein Intervall von 0 Sekunden ist keine Messrate, sondern ein Fehler."
+    }
+  ]
+}
