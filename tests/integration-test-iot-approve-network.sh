@@ -93,7 +93,7 @@ do_login() {
         local method="${IOT_MFA_METHOD:-}" mfa_code="${IOT_MFA_CODE:-}"
         if [[ -z "$method" || -z "$mfa_code" ]]; then
             if [[ -t 0 ]]; then
-                echo "  [INFO] MFA required, methods: $(echo "$resp" | sed '$d' | python -c 'import sys,json; print(", ".join(json.load(sys.stdin).get("methods", [])))')"
+                echo "  [INFO] MFA required, methods: $(echo "$resp" | sed '$d' | python -c 'import sys,json; print(", ".join((m.get("type") if isinstance(m, dict) else str(m)) for m in json.load(sys.stdin).get("methods", [])))')"
                 read -rp "  MFA method [totp/email/backup]: " method
                 if [[ "$method" == "email" ]]; then
                     curl -s -o /dev/null -c "$COOKIE_JAR" -b "$COOKIE_JAR" -X POST "${BASE_URL}/auth/mfa-email-send" \
