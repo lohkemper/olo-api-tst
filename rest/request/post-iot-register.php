@@ -117,9 +117,15 @@ class requestPostIotRegister extends RequestBase {
             return;
         }
 
-        $networkId = $this->getActiveNetworkId();
-        if ($networkId === null) {
-            return;
+        // Re-registration keeps the network the device was bound to — an admin
+        // may have assigned it to a specific Pi on approval (STORY-11.4). Only a
+        // device without any network falls back to the server-side active one.
+        $networkId = isset($existing['mbc_iot_networks']) ? (int)$existing['mbc_iot_networks'] : null;
+        if ($networkId === null || $networkId <= 0) {
+            $networkId = $this->getActiveNetworkId();
+            if ($networkId === null) {
+                return;
+            }
         }
 
         $deviceId = (int)$existing['iot_devices_id'];
@@ -353,7 +359,7 @@ class requestPostIotRegister extends RequestBase {
      */
     private function findExistingDevice(string $chipId): ?array {
         $stmt = $this->pdo->prepare(
-            'SELECT iot_devices_id, provisioning_status, api_key_hash
+            'SELECT iot_devices_id, provisioning_status, api_key_hash, mbc_iot_networks
              FROM mbc_iot_devices WHERE chip_id = ?'
         );
         $stmt->execute([$chipId]);
@@ -412,7 +418,9 @@ class requestPostIotRegister extends RequestBase {
 
     /**
      * Update an existing device on self-rotation. Provisioning status is left
-     * untouched (only an admin changes approval).
+     * untouched (only an admin changes approval). $networkId is the network the
+     * device already belongs to (or the active fallback for legacy rows without
+     * one), so writing it here never moves a device to another Pi.
      */
     private function updateDevice(int $deviceId, array $validated, int $networkId, string $apiKey, string $apiKeyHash): void {
         $stmt = $this->pdo->prepare(

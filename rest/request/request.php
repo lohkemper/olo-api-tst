@@ -1836,6 +1836,9 @@ class request {
                 $handler = new requestPostIotDeviceApprove($this->pdo, '');
                 $handler->setDeviceId((int)$key);
                 $handler->setAction((string)$value);
+                // Optional JSON body, e.g. {"network_id": 2} to bind the device
+                // to a specific IoT network (= Pi) on approval (STORY-11.4).
+                $handler->setData($_PUT ?? []);
                 $handler->execute();
                 return true;
             }
