@@ -269,13 +269,16 @@ assert "network_id unchanged ($before -> $after)" "$([[ -n "$before" && "$before
 assert "device B not on test network" "$([[ "$after" != "$NET_ID" ]] && echo true || echo false)"
 echo
 
-# ---- cleanup: test network can only go once device A is moved off it ----
-echo "[cleanup] move device A back to network $before, delete test network"
-api POST "/iot/devices/$DEV_A/approve" "{\"network_id\": $before}" >/dev/null
+# ---- cleanup: delete the two test devices, then the test network ----
+echo "[cleanup] delete test devices $DEV_A/$DEV_B and network $NET_ID"
+for d in "$DEV_A" "$DEV_B"; do
+    [[ -n "$d" ]] || continue
+    dc=$(curl -s -o /dev/null -w "%{http_code}" -b "$COOKIE_JAR" -X DELETE "${BASE_URL}/iot/devices/$d" -H "X-CSRF-Token: $CSRF_TOKEN")
+    echo "  DELETE /iot/devices/$d -> HTTP $dc"
+done
 resp=$(api DELETE "/iot/networks/$NET_ID")
 code=$(echo "$resp" | tail -n1)
 assert "DELETE test network -> 2xx (got $code)" "$([[ "$code" == "200" || "$code" == "204" ]] && echo true || echo false)"
-echo "  devices $DEV_A ($TEST_CHIP_A) and $DEV_B ($TEST_CHIP_B) remain; delete via DELETE /iot/devices/{id} if desired"
 echo
 
 # ---------- summary ----------
