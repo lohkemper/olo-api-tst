@@ -87,6 +87,36 @@ do_login() {
         echo "ERROR: login response carries no csrfToken" >&2
         exit 2
     fi
+    # Accounts with MFA get a pending session first; complete it with
+    # IOT_MFA_METHOD (totp|email|backup) + IOT_MFA_CODE, or interactively.
+    if [[ "$(echo "$resp" | sed '$d' | json_field mfaRequired)" == "True" ]]; then
+        local method="${IOT_MFA_METHOD:-}" mfa_code="${IOT_MFA_CODE:-}"
+        if [[ -z "$method" || -z "$mfa_code" ]]; then
+            if [[ -t 0 ]]; then
+                echo "  [INFO] MFA required, methods: $(echo "$resp" | sed '$d' | python -c 'import sys,json; print(", ".join(json.load(sys.stdin).get("methods", [])))')"
+                read -rp "  MFA method [totp/email/backup]: " method
+                if [[ "$method" == "email" ]]; then
+                    curl -s -o /dev/null -c "$COOKIE_JAR" -b "$COOKIE_JAR" -X POST "${BASE_URL}/auth/mfa-email-send" \
+                        -H "Content-Type: application/json" -H "X-CSRF-Token: $CSRF_TOKEN" -d '{}'
+                fi
+                read -rp "  MFA code: " mfa_code
+            else
+                echo "ERROR: MFA required — set IOT_MFA_METHOD and IOT_MFA_CODE" >&2
+                exit 2
+            fi
+        fi
+        resp=$(curl -s -w "\n%{http_code}" -c "$COOKIE_JAR" -b "$COOKIE_JAR" \
+            -X POST "${BASE_URL}/auth/mfa-verify" \
+            -H "Content-Type: application/json" -H "X-CSRF-Token: $CSRF_TOKEN" \
+            -d "{\"method\":\"$method\",\"code\":\"$mfa_code\",\"rememberDevice\":false}")
+        code=$(echo "$resp" | tail -n1)
+        if [[ "$code" != "200" ]]; then
+            echo "ERROR: MFA verify failed (HTTP $code)" >&2
+            echo "$resp" | sed '$d' >&2
+            exit 2
+        fi
+        CSRF_TOKEN=$(echo "$resp" | sed '$d' | json_field csrfToken)
+    fi
     echo "  [INFO] logged in as $IOT_ADMIN_EMAIL"
 }
 
