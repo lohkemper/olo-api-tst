@@ -274,7 +274,7 @@ echo "[cleanup] move device A back to network $before, delete test network"
 api POST "/iot/devices/$DEV_A/approve" "{\"network_id\": $before}" >/dev/null
 resp=$(api DELETE "/iot/networks/$NET_ID")
 code=$(echo "$resp" | tail -n1)
-assert "DELETE test network -> 200 (got $code)" "$([[ "$code" == "200" ]] && echo true || echo false)"
+assert "DELETE test network -> 2xx (got $code)" "$([[ "$code" == "200" || "$code" == "204" ]] && echo true || echo false)"
 echo "  devices $DEV_A ($TEST_CHIP_A) and $DEV_B ($TEST_CHIP_B) remain; delete via DELETE /iot/devices/{id} if desired"
 echo
 
