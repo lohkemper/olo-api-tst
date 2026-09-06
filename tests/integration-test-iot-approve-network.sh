@@ -205,7 +205,7 @@ resp=$(api POST "/iot/devices/$DEV_A/approve" '{"network_id": 999999}')
 code=$(echo "$resp" | tail -n1)
 assert "HTTP 400 (got $code)" "$([[ "$code" == "400" ]] && echo true || echo false)"
 resp=$(api GET "/iot/devices/$DEV_A"); body=$(echo "$resp" | sed '$d')
-status=$(echo "$body" | json_field provisioning_status)
+status=$(echo "$body" | json_field provisioningStatus)
 assert "device still pending (got '$status')" "$([[ "$status" == "pending" ]] && echo true || echo false)"
 echo
 
@@ -223,7 +223,7 @@ code=$(echo "$resp" | tail -n1); body=$(echo "$resp" | sed '$d')
 assert "HTTP 200 (got $code)" "$([[ "$code" == "200" ]] && echo true || echo false)"
 got=$(echo "$body" | json_field network_id)
 assert "response network_id == $NET_ID (got '$got')" "$([[ "$got" == "$NET_ID" ]] && echo true || echo false)"
-status=$(echo "$body" | json_field provisioning_status)
+status=$(echo "$body" | json_field provisioningStatus)
 assert "provisioning_status approved" "$([[ "$status" == "approved" ]] && echo true || echo false)"
 resp=$(api GET "/iot/devices/$DEV_A"); body=$(echo "$resp" | sed '$d')
 got=$(echo "$body" | json_field networkId)
