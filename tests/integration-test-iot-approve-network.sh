@@ -31,6 +31,7 @@ PASS=0
 FAIL=0
 FAILED_TESTS=()
 COOKIE_JAR=$(mktemp)
+CSRF_TOKEN=""
 trap 'rm -f "$COOKIE_JAR"' EXIT
 
 RUN_ID=$(date +%s)
@@ -80,6 +81,12 @@ do_login() {
         echo "$resp" | sed '$d' >&2
         exit 2
     fi
+    # Admin POST/PUT/DELETE calls need the session CSRF token from the login response
+    CSRF_TOKEN=$(echo "$resp" | sed '$d' | json_field csrfToken)
+    if [[ -z "$CSRF_TOKEN" ]]; then
+        echo "ERROR: login response carries no csrfToken" >&2
+        exit 2
+    fi
     echo "  [INFO] logged in as $IOT_ADMIN_EMAIL"
 }
 
@@ -88,9 +95,10 @@ api() {
     local method="$1" path="$2" body="${3:-}"
     if [[ -n "$body" ]]; then
         curl -s -w "\n%{http_code}" -b "$COOKIE_JAR" -X "$method" "${BASE_URL}${path}" \
-            -H "Content-Type: application/json" -d "$body"
+            -H "Content-Type: application/json" -H "X-CSRF-Token: $CSRF_TOKEN" -d "$body"
     else
-        curl -s -w "\n%{http_code}" -b "$COOKIE_JAR" -X "$method" "${BASE_URL}${path}"
+        curl -s -w "\n%{http_code}" -b "$COOKIE_JAR" -X "$method" "${BASE_URL}${path}" \
+            -H "X-CSRF-Token: $CSRF_TOKEN"
     fi
 }
 
